@@ -1,0 +1,163 @@
+;;;;;;;;;;;;; Jai Shree Ram ;;;;;;;;;;;;
+
+[Collection:CancleVouchers]
+		Type        : Vouchers : VoucherType
+		Child Of	: $$VchTypeSales
+		Belongs To 	: Yes
+		Fetch		: vouchernumber, MasterId
+		Filter		: vchnomstid
+		
+;select $Vouchernumber, $MasterId from CancleVouchers
+[System:Formulae]
+	vchnomstid					: $vouchernumber = ##Dyms_AGSTREFNUMBER;"DHI09230498"
+
+[Collection: Dyms_FTPDirectoryCancelSalesColl]
+	
+	Data Source : Directory	: @@RetailerDownloadFTPCancelSales     
+	Filter		: Dyms_FilterFiles
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+[Collection: Dyms_DirectoryVoucherCNLSales]
+	
+	Data Source : Directory	: @@MDCancelSalesfilepatch     
+	Filter		: Dyms_FilterFiles
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+;Select $name from Dyms_DirectoryVoucherCNLSales
+
+[Collection	:DymsJsonCNLSalesCollection]
+	
+		Data Source:File JSON		: ##Dyms_LocalFileNames;@@MDCancelSalesfilepatch+"\"+$Name;
+   	  	JSON Object Path	: "CANCEL:1"
+		
+;Select $SALENUMBER from DymsJsonCNLSalesCollection
+
+
+;;;;;;;;;;Cancel Sales creation ;;;;;;;;;;;;;;;;;;		
+[Function:Dyms_CancelSalesDownload]
+	
+	Variable	: 	DymsLocalPathSalesDownload		: String
+	
+	Variable	:	DymsCNLSalesLogCount			:Number
+	Variable	:	Dyms_AGSTREFNUMBER				:String
+	Variable	:	Dyms_IRNCANCELDATEVar			:STring	
+    Variable	:   Dyms_IRNCANCELREASONCODE        :STring	
+    Variable	:   Dyms_IRNCANCELREMARK            :STring	
+	
+    Variable	:   Dyms_IRNQRCodeVar	            :STring
+	Variable	:	Dyms_REMARKNOTEVar				:String
+	Variable	:	Dyms_LocalFileNames				:String
+
+	Variable	: 	Errcount							:Number: 0 
+	Variable	:	Dyms_CountrMsgVAr1,Dyms_CountrMsgVAr2,Dyms_CountrMsgVAr3:String
+ 	Variable	: 	DymsLocalHostPathRetailer,DymsFTPPathRetailer			: String				
+	Variable	:   DymsLocalHostPathUploadDown			: String				
+	
+	00		: 	Log: "Cancel Sales Is Running"	
+;	02		:	Make Dir:@@RetailerDownloadDatapaths;".\EXCHANGE\SALESIMPORT"
+ 	020 	:	Set			: DymsLocalHostPathRetailer		:	@@MDCancelSalesfilepatch;
+ 	030 	:	Set			: DymsFTPPathRetailer			:$$IsEmptyCollection:Dyms_FTPDirectoryCancelSalesColl;$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@DymcsFTPCustomerFolder
+;	032		:	Msg Box	:	DymsFTPPathRetailer	:	##DymsFTPPathRetailer
+	034		:	If:$$IsInternetActive
+;	023  	:   Modify Object : (Company,$$CurrentSimpleCompany).AutoSyncJob.AutoSyncJob : "Sales"
+;	03  	:   Modify Object : (Company,$$CurrentSimpleCompany).AutoSyncAllJob.AutoSyncAllJob : ""
+	
+;;;;;;;;;;;;;;;;; FTP File Download into local Machine ;;;;;;;;;;;;;;;;;;;;
+	035	:	If:NOT $$IsEmptyCollection:Dyms_FTPDirectoryCancelSalesColl 
+	036	:	Set	:	Dyms_CountrMsgVAr1	:	$$NumItems:Dyms_FTPDirectoryCancelSalesColl 
+	037	:	Start Progress:(##Dyms_CountrMsgVAr1) : "Downloading Json Files From FTP" : "Please Wait" : ""
+ 	040 :	Walk Collection	:	Dyms_FTPDirectoryCancelSalesColl
+	056	:	Show Progress:$$LoopIndex:$$Sprintf:" %s %s":($$LocaleString:"Downloading.."):($Name)
+  	055 : 	Copy File		: ##DymsLocalHostPathRetailer	:   @@RetailerDownloadFTPCancelSales+"/"+$Name
+	060	:	End Walk
+	061	:	End Progress
+	
+	065		:	Walk Collection	:	Dyms_DirectoryVoucherCNLSales
+	068		:	Set	:	Dyms_LocalFileNames	:	""
+	070		:	Set	:	Dyms_LocalFileNames	:	@@MDCancelSalesfilepatch+"\"+$Name
+
+	100 	:   Set :	DymsCNLSalesLogCount:$$NumItems:DymsJsonCNLSalesCollection
+
+	105		:   If:##DymsCNLSalesLogCount>0
+	120		:  	Start Batch Post:100
+	
+;;;;;;;;;;;;;;;; Cancel Sales Log File write ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+	121		: 	Set File Log On
+	122		: 	OPEN FILE :@@MDCancelSaleslogfilepatch:Text:Write 
+	123		:	Write File Line	: "==========================================================================="
+	124		: 	Write File Line	: "Total canceled sales vouchers to update - "+$$String:(##DymsCNLSalesLogCount)+" On "+$$String:($$MachineDate)+"-"+$$String:($$MachineTime)
+	125		:	Close Target File
+	126		:	Set File Log Off
+	
+	127		:	Set	:	Dyms_CountrMsgVAr1	:	$$NumItems:DymsJsonCNLSalesCollection 
+	128		:	Start Progress:(##Dyms_CountrMsgVAr1) : ($$LocaleString:"Importing Cancel Sales") : "Please wait" : ""
+	130		:	Walk Collection:DymsJsonCNLSalesCollection
+	135		:	Set	: Dyms_AGSTREFNUMBER		: $$String:$AGSTREFNUMBER
+	140		:	Set	: Dyms_IRNCANCELDATEVar		: $IRNCANCELDATE
+	145		:	Set	: Dyms_IRNCANCELREASONCODE	: $IRNCANCELREASONCODE
+	150		:	Set	: Dyms_IRNCANCELREMARK		: $IRNCANCELREMARK
+	
+;;;;;;;;; Cancel e-invoice details ;;;;;;;;;;;;
+	155		:	If : not $$IsEmptyCollection:CancleVouchers;not ($$IsEmpty:($Vouchernumber:Voucher:##Dyms_AGSTREFNUMBER))
+	000 	: Walk Collection:CancleVouchers
+	005 	:  Set Target
+	115		:  Set Value		: IRNCANCELLED				:  Yes
+	205		:  Set Value		: IRNCANCELDate				:  $$Date:##Dyms_IRNCANCELDATEVar		
+	206		:  Set Value		: IRNCANCELREASON			:  $$String:##Dyms_IRNCANCELREASONCODE;"1 - Duplicate"
+	207		:  Set Value		: IRNCANCELCODE				:  $$String:##Dyms_IRNCANCELREMARK
+	050		:  Accept Alter
+	1050	:  Show Progress:$$LoopIndex:$$Sprintf:" %s %s":($$LocaleString:"Updating Sales Voucher for canceling.."):(##Dyms_AGSTREFNUMBER)
+	010 	:  Cancel Target 
+	015 	: End Walk
+	160		:	Else	
+	5042	:	Increment: ErrCount
+	
+	
+;;;;;;;;;;;;;;;; Error Log File ;;;;;;;;;;;;;;;;;;;;;;;;;;
+	5002	:  If: not ##Errcount = 0;not $$LastResult;: Set: result : False;
+	5004	:   Set File Log On
+	5005	:   OPEN FILE :@@MDCancelSaleslogfilepatch:Text:Write 
+	5010	:	Write File Line	: $$String:($$LastError)
+	5020	:	Write File Line	: $$String:"Error from :"+$$String:##Dyms_AGSTREFNUMBER
+	5030	:	Set File Log Off
+	5040	:	Close Target File
+	080		:  End If
+	5044	:  End If
+	5450	:  End Walk
+	
+	LocalFormula:	DateTimeFolder	:	$$LocaleString:($$YearOfDate:$$MachineDate)+$$LocaleString:"-"+$$LocaleString:($$ZeroFill:($$MonthOfDate:$$MachineDate):2)+$$LocaleString:"-"+$$LocaleString:($$ZeroFill:($$DayOfDate:$$MachineDate):2)+$$LocaleString:"-"+$$LocaleString:($$StringFindAndReplace:($$MachineTime):":":"-")
+
+	5458	:	Set	:	DymsLocalHostPathUploadDown	:	@@MDCancelSalesfileArchpatch
+	
+;;;;;;;;;;;;;;;;; Error Message ;;;;;;;;;;;;;;;;;;
+	12752	:	If	: ##Errcount = 0
+	5490	:	Copy File	:	##DymsLocalHostPathUploadDown+"\"+ @DateTimeFolder+"\":##Dyms_LocalFileNames
+	5500	:	Delete File:##Dyms_LocalFileNames
+	1201F	: 	Copy File	: @@RetailerDownloadFTPCancelSalesArch+"/"+@DateTimeFolder+"/"	:   @@RetailerDownloadFTPCancelSales+"/"+$Name
+	1205F	: 	Delete File:   @@RetailerDownloadFTPCancelSales+"/"+$Name
+	12753	:	Set	:	Dyms_CountrMsgVAr2	:	$$LocaleString:"Status : Process Completed! Cancel Sales Updated Successfully!! "
+	12754	:		Log	:  ##Dyms_CountrMsgVAr2
+	12756	:	Else
+	12757	:	Set	:	Dyms_CountrMsgVAr3	:	$$LocaleString:"Status : Error While Importing!! Please Refer Log File " +$$LocaleString:@@MDCancelSaleslogfilepatch
+	12758	:		Log: ##Dyms_CountrMsgVAr3
+	1040a	: 	Decrement: Errcount
+	12760	:	End If
+	
+	5455	: End Progress
+	5470	: End Batch Post
+	5480	: Else
+	5485	:	Set	:	DymsLocalHostPathUploadDown	:	@@MDCancelSalesfileArchpatch
+	12700	: End If
+	12750	: End Walk
+	
+	12780	: Else
+	12790	: Log: "No Data File In Cancel Sales Folder"
+	12800	:	End If
+	12810	: Else
+	12820	: Msg Box	:	"Warning!" :	"Check Internet Availability!"
+	12830	:	End If
+	12835	: Return

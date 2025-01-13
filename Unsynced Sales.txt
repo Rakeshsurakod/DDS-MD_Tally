@@ -1,0 +1,234 @@
+;; Shree Ganeshay Namhaa 
+
+
+[Collection: LastSalesVoucherNumber]
+	Parm Var	: SVFromDate	: Date		: $MDFromDate:Company:##Svcurrentcompany ;#MDFromDate ;"01-05-2024";##SVFromDate
+    Parm Var	: SVToDate		: Date		: $MDToDate:Company:##Svcurrentcompany   ;#MDToDate     ;"01-05-2024";##SVToDate
+  	Type         : Vouchers : VoucherType
+    Child Of     : "MD Sales" 
+    Fetch        : VoucherNumber
+    Compute      : LastVchNo : $$Number:$VoucherNumber
+	Compute		 : LastSaleNo: -$Vouchernumber
+    Sort         : @@SortVoucherNumbers : $VoucherNumber
+    
+;	select $LastVchNo, $VoucherNumber from LastSalesVoucherNumber
+[Collection: LastSalesVoucherNumber2]
+	Parm Var	: SVFromDate	: Date		: $MDFromDate:Company:##Svcurrentcompany	;#MDFromDate;"01-05-2024";
+    Parm Var	: SVToDate		: Date		: $MDToDate:Company:##Svcurrentcompany   	;																	#MDToDate ;"01-05-2024";
+  	Type	     : Vouchers : VoucherType 
+    Child Of     : "MD Sales"
+	Fetch	   	 : VoucherNumber
+    Compute      : VchNo : $$Number:$VoucherNumber
+    Sort         : @@SortVoucherNumbers : -$VoucherNumber
+   
+;select $VchNo, $VoucherNumber from LastSalesVoucherNumber2
+
+[Collection	: SampleColletion ]
+	Source Collection	: LastSalesVoucherNumber2
+	Fetch		: VoucherNumber
+	Compute Var	 : VchNoSet : String	: $$Number:$VoucherNumber;$$StringWordEx:$VoucherNumber:"/":2
+    Fetch        : VoucherNumber
+    Compute      : VchNo : ##VchNoSet;$$Number:$VoucherNumber
+	;Filter		: FiltercountFlt
+
+
+;select $VchNo,$Count,$VchNoSet,$VoucherNumber from SampleColletion
+
+;;;;;;;;;;;;;; Sales Collection :;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;; List Variable ;;;;;;;;;;;;;;;;;
+
+[System: Variables]
+	List Variable:  MissingVoucherNumber
+	
+
+[Variable: MissingVoucherNumber]
+	Variable: VarVchnumber : String
+	Variable: SerialNumber : Number
+	
+[Function: UpdateListvariable]
+	Variable: Counter	: Number	;;: 1
+	Variable: KeyVar	: String
+	Variable: FirstNum	: Number	: $$CollectionField:$LastVchNo:1:LastSalesVoucherNumber
+	Variable: LastNum	: Number	: $$CollectionField:$VchNo:1:LastSalesVoucherNumber2
+
+	10  : List Delete: MissingVoucherNumber	
+	14	: Set: FirstNum	: $$CollectionField:$LastVchNo:1:LastSalesVoucherNumber
+	16	: Set: LastNum	: $$CollectionField:$VchNo:1:LastSalesVoucherNumber2
+	25	: Log: ##FirstNum
+;	20	: Log: ##LastNum 
+	30	: While: ##FirstNum <= ##LastNum
+;	45  : Log: "Enter in List variable"	
+	60  :   	Set			: KeyVar	    : (($$String:##Counter))
+	70  :    	List Add	: MissingVoucherNumber	: ##KeyVar : ($$String:##FirstNum)	: SerialNumber  ;; actual created item name		;
+;	94  : Log:  ##MissingVoucherNumber[##KeyVar].SerialNumber
+   310	:       Increment	: Counter
+   320	: 	Increment: FirstNum
+   100	: End While
+ ;  150	: Alter	: Voucher1
+   200	: Return
+   
+ 
+[Collection	: CallListVarforMissingSales]
+	
+	Data Source	: Variable	: MissingVoucherNumber
+	Format		: $VarVchnumber, 20
+	Format		: $SerialNumber, 20
+	fetch 	    : VarVchnumber, SerialNumber
+	 
+;select $VarVchnumber, $SerialNumber from CallListVarforMissingSales
+
+[Collection:Lastcoll]
+	Source Collection	: CallListVarforMissingSales
+	Fetch		: SerialNumber
+	Compute		: Count		: $$FilterCount:SampleColletion:CheckSerialNo
+	Filter		: FiltercountFlt
+	
+;; select $SerialNumber,$Count from Lastcoll
+
+[System: Formula]
+    SortVoucherNumbers : $$Number:$VoucherNumber
+    IsSalesVoucher     : $$IsSales:$VoucherTypeName
+	FiltercountFlt	   : $$FilterCount:SampleColletion:CheckSerialNo = 0
+	CheckSerialNo	   : $$Owner:$SerialNumber = $$Number:$VchNo
+
+[#Menu:GatewayofTally]
+	Add	: Item	: Missing Sales Entries	: Alter:Voucher1
+	;Add	: Item	: caks		: Call	: UpdateListvariable
+	
+[Report: Voucher1]
+	Form		: CustomVoucherNumberForm
+	Object		: Company : ##SVCurrentCompany
+	Local		: Part		: CustomVoucherNumberPart		: Repeat 	: CustomVoucherNumberLine	: Lastcoll
+	On			: Load	: Yes	: Action	: Display Current Collection
+	
+[Form: CustomVoucherNumberForm]
+    Part        : Staticpart,CustomVoucherNumberPart
+	
+[Part:Staticpart]
+	Line		: MD Report
+	Line		: RP Title1, MDSV Date Range
+	
+[Part: CustomVoucherNumberPart]
+
+    Line        : CustomVoucherNumberLine
+	Repeat		: CustomVoucherNumberLine : Lastcoll
+	Scroll		: Vertical
+	Break On	: Yes 
+	
+[Line:MD Report]
+	Field: MD Report
+	Space Bottom	: 0.5
+	;Border	: Thin Bottom
+	
+[Field:MD Report]
+	Align       : Right
+	Case        : Title Case
+	Style       : Normal Bold
+	;Border      : Thin Bottom
+	Info        : $$LocaleString:"Unsynced Sales"
+	Skip        : Yes
+	Fixed       : Yes
+	Space Left	: 25
+	Space Right	: 25
+	
+[Line: RP Title1]
+   Field    : MV Title1
+   Space Bottom    : 0.5
+   Border	: thin box
+
+[Field:MV Title1]
+
+	Align       : Right
+	Case        : Proper Case;Title Case
+	Style       : Normal Bold
+	Border      : Thin Bottom
+	Info        : $$LocaleString:"Select Period"
+	Skip        : Yes
+	Fixed       : Yes
+
+				
+[Line: MDSV Date Range]
+
+    Field : Medium Prompt, MDFromDate, Short Prompt, MDToDate
+    Local : Field : Medium Prompt : Info : @@DateFromFormat
+    Local : Field : Short Prompt : Info : @@DateToFormat
+    Border    : thin Bottom
+    Space Bottom    : 1
+              
+[Field: MDFromDate]
+
+	Use         : Short Date Field
+	Storage		: MDFromDate
+    Set Always  : Yes
+    Format      : Short Date
+	Set as		: $MDFromDate
+	Width       : 10
+;	Control 	: Ctrlcondnt	:  $$Value < $$MonthStart:##SVCurrentDate
+	Validation  : not( $$IsEmpty:$$Value) 
+        
+[System:Formulae]
+	Ctrlcondnt	: $$SPrintf:@@AllowedMonth:@@ValueFormula1 
+	AllowedMonth: $$LocaleString:"Enter Date Within Current Month"
+	ValueFormula1: $$LocaleString:"Please Enter Date within current Month"
+	Ctrlcondnt1	: $$SPrintf:@@Hlle:@@7days
+	hlle		: $$LocaleString:"Enter Date Within a Week"
+	7days		: $$LocaleString:"Enter Date Within a Week"
+	
+[Field: MDToDate]
+
+    Use         : Short Date Field
+    Format      : Short Date
+	Storage		: MDTodate
+	Set Always  : Yes
+	Width       : 10
+	Set as		: $MDTodate ;$$Date:#MDFromDate + 7
+	;Control		: Ctrlcondnt1	: $$Value > ($$Date:#MDFromDate + 7)
+	Validate    : Not $$IsEmpty:$$Value OR $$Value >= #MDFromDate
+	On            :  Accept    : yes    : Call    : UpdateListvariable ;: #MDFromDate : #MDToDate
+;	On            :  Accept    : yes    : Alter    : Voucher1 
+	On            :  Accept    : Yes    : Field Accept
+                  
+[Line: CustomVoucherNumberLine]
+    Field       : CustomVoucherNumber
+	
+[Field: CustomVoucherNumber]
+	Align		: Center
+    Use         : Name Field
+    Set Always  : Yes
+    Set As      : $SerialNumber;("CS/" + $SerialNumber + "/24-25");$$GetNextVoucherNumber
+;	Skip		: Yes
+	Width		: 63
+	
+[Function: SalesMissingreport]
+
+	00	: IF	: $$NumItems:Lastcoll > 0
+	10	:	DISPLAY		: SalesMissingreport
+	20	: ELSE	: 
+	30	:	MSGBOX		: "Error!"			: "Simple List Variable is Empty"
+	;40	: 	QUERYBOX 	: "Do you want to add values now ?":Yes:No
+;	50	:	IF	: $$LastResult
+;	60	:		ALTER	: SalesMissingreport
+;	70	:		CALL	: SalesMissingreport
+;	80	:	ENDIF
+	90	: ENDIF
+
+[Report: SalesMissingreport]
+	Form:VarValues
+	;Use		: LV List Values
+	Local	: Form	: VarValues	: Height: 100% Page
+	Local	: Form	: VarValues	: Width	: 20% Page
+	Local	: Form	: VarValues	: Local	: Field	: Form SubTitle	: Info	: "List of Employee Names"
+
+	Local	: Part	: VarValues	: Repeat: VarValues	: CallListVarforMissingSales
+
+	Local	: Line	: VarValues	: Local	: Field	: LV Alias	: Set As	: $$VarKey
+	Local	: Line	: VarValues	: Local	: Field	: LV Name	: Set As	: $SerialNumber
+	Local	: Line	: VarValues	: Local	: Field	: LV Name	: Inactive	: No
+	
+	Local	: Field	: LV Name			: Delete: Border
+	
+[System:UDF]
+	MDFromdate	: Date	: 21050
+	MDToDate	: Date	: 21055
+	MissVchNo	: String	: 21060

@@ -1,0 +1,268 @@
+;;;;;;;;;;;;;;;;;;;;; Jai Shree Ram ;;;;;;;;;;;;;;;;;;;;;;;
+
+
+[Collection:EwaybillSalesvoucher]
+		Type        : Vouchers : VoucherType
+		Child Of	: $$VchTypeSales
+		Belongs To 	: Yes
+		Fetch		: vouchernumber, MasterId
+		Filter		: vchnomasterid
+		
+;select $Vouchernumber, $MasterId from EwaybillSalesvoucher
+[System:Formulae]
+	vchnomasterid				: $vouchernumber = ##Dyms_AGSTREFNUMBER;"CS/14172/23-24"
+
+[Collection:DymsJsonEWayUpdateCollection]
+		Data Source:File JSON		: ##Dyms_LocalFileNames  
+   	  	JSON Object Path	: "EWayBill:1"
+		
+[Collection: Dyms_FTPDirectoryUpdateEwayColl]
+	
+	Data Source : Directory	: @@RetailerDownloadFTPUpdateEway     
+	Filter		: Dyms_FilterFiles
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+[Collection: Dyms_DirectoryVoucherEWaybill]
+	
+	Data Source : Directory	: @@MDUpdateEwayfilepatch     
+	Filter		: Dyms_FilterFiles
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+;Select $name from Dyms_DirectoryVoucherEWaybill
+
+[Function:UpdateEwaybill]
+	
+	Variable	:	DymsupdateEwayLogCount			:Number
+	Variable	:	Dyms_AGSTREFNUMBER				:String
+	Variable	:	Dyms_LocalFileNames				:String
+
+	Variable	: 	Errcount							:Number: 0 
+	Variable	:	Dyms_CountrMsgVAr1,Dyms_CountrMsgVAr2,Dyms_CountrMsgVAr3:String
+ 	Variable	: 	DymsLocalHostPathRetailer,DymsFTPPathRetailer			: String				
+	Variable	:   DymsLocalHostPathUploadDown			: String				
+	
+	00		: 	Log: "Updating Ewaybill Details"	
+;	02		:	Make Dir:@@RetailerDownloadDatapaths;".\EXCHANGE\SALESIMPORT"
+ 	020 	:	Set			: DymsLocalHostPathRetailer		:	@@MDUpdateEwayfilepatch;
+ 	030 	:	Set			: DymsFTPPathRetailer			:$$IsEmptyCollection:Dyms_FTPDirectoryUpdateEwayColl;$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@DymcsFTPCustomerFolder
+;	032		:	Msg Box	:	DymsFTPPathRetailer	:	##DymsFTPPathRetailer
+	034		:	If:$$IsInternetActive
+;	023  	:   Modify Object : (Company,$$CurrentSimpleCompany).AutoSyncJob.AutoSyncJob : "Sales"
+;	03  	:   Modify Object : (Company,$$CurrentSimpleCompany).AutoSyncAllJob.AutoSyncAllJob : ""
+	
+;;;;;;;;;;;;;;;;; FTP File Download into local Machine ;;;;;;;;;;;;;;;;;;;;
+	035	:	If:NOT $$IsEmptyCollection:Dyms_FTPDirectoryUpdateEwayColl 
+	036	:	Set	:	Dyms_CountrMsgVAr1	:	$$NumItems:Dyms_FTPDirectoryUpdateEwayColl 
+	037	:	Start Progress:(##Dyms_CountrMsgVAr1) : "Downloading Json Files From FTP" : "Please Wait" : ""
+ 	040 :	Walk Collection	:	Dyms_FTPDirectoryUpdateEwayColl
+	056	:	Show Progress:$$LoopIndex:$$Sprintf:" %s %s":($$LocaleString:"Downloading.."):($Name)
+  	055 : 	Copy File		: ##DymsLocalHostPathRetailer	:   @@RetailerDownloadFTPUpdateEway+"/"+$Name
+	060	:	End Walk
+	061	:	End Progress
+	
+	065		:	Walk Collection	:	Dyms_DirectoryVoucherEWaybill
+	068		:	Set	:	Dyms_LocalFileNames	:	""
+	070		:	Set	:	Dyms_LocalFileNames	:	@@MDUpdateEwayfilepatch+"\"+$Name
+
+	100 	:   Set :	DymsupdateEwayLogCount:$$NumItems:DymsJsonEWayUpdateCollection
+
+	105		:   If:##DymsupdateEwayLogCount>0
+	120		:  	Start Batch Post:100
+	
+;;;;;;;;;;;;;;;; EWaybill Update Log File write ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+	121		: 	Set File Log On
+	122		: 	OPEN FILE :@@MDUpdateEwaylogfilepatch:Text:Write 
+	123		:	Write File Line	: "==========================================================================="
+	124		: 	Write File Line	: "Total e-Waybill Details to be Updated are - "+$$String:(##DymsupdateEwayLogCount)+" On "+$$String:($$MachineDate)+"-"+$$String:($$MachineTime)
+	125		:	Close Target File
+	126		:	Set File Log Off
+	
+	127		:	Set	:	Dyms_CountrMsgVAr1	:	$$NumItems:DymsJsonEWayUpdateCollection 
+	128		:	Start Progress:(##Dyms_CountrMsgVAr1) : ($$LocaleString:"Importing e-Waybill Details") : "Please wait" : ""
+	130		:	Walk Collection:DymsJsonEWayUpdateCollection
+	135		:	Set	: Dyms_AGSTREFNUMBER		: $$String:$AGSTREFSALENUMBER
+
+;;;;;;;;;;;;; Update EWaybill Details ;;;;;;;;;;;;;;
+
+	00o	: If : not $$IsEmptyCollection:EwaybillSalesvoucher
+	000 :  Walk Collection:EwaybillSalesvoucher
+	001	:  Set Object	: (Voucher, $MasterId).
+	005	:  Set Target
+	1050:  Show Progress:$$LoopIndex:$$Sprintf:" %s %s":($$LocaleString:"Updating e-Waybill Details for Sales.."):(##Dyms_AGSTREFNUMBER)
+	180	: If: $$IsEmptyCollection:EwayBillDetails
+	115	:  Call: UpdateGSTeWayBillDetailssync
+	oio	: End If
+	050	:  Accept Alter
+	015 : End Walk
+	160	:	Else
+	5042:	Increment: ErrCount
+
+;;;;;;;;;;;;;;;; Error Log File ;;;;;;;;;;;;;;;;;;;;;;;;;;
+	5002	:  If: not ##Errcount = 0;not $$LastResult;: Set: result : False;
+	5004	:   Set File Log On
+	5005	:   OPEN FILE :@@MDUpdateEwaylogfilepatch:Text:Write 
+	5010	:	Write File Line	: $$String:($$LastError)
+	5020	:	Write File Line	: $$String:"Error from :"+$$String:##Dyms_AGSTREFNUMBER
+	5030	:	Set File Log Off
+	5040	:	Close Target File
+	080		:  End If
+	5044	:  End If
+	5450	:  End Walk
+	
+	LocalFormula:	DateTimeFolder	:	$$LocaleString:($$YearOfDate:$$MachineDate)+$$LocaleString:"-"+$$LocaleString:($$ZeroFill:($$MonthOfDate:$$MachineDate):2)+$$LocaleString:"-"+$$LocaleString:($$ZeroFill:($$DayOfDate:$$MachineDate):2)+$$LocaleString:"-"+$$LocaleString:($$StringFindAndReplace:($$MachineTime):":":"-")
+
+	5458	:	Set	:	DymsLocalHostPathUploadDown	:	@@MDUpdateEwayfileArchpatch
+	
+;;;;;;;;;;;;;;;;; Error Message ;;;;;;;;;;;;;;;;;;
+	12752	:	If	: ##Errcount = 0
+	5490	:	Copy File	:	##DymsLocalHostPathUploadDown+"\"+ @DateTimeFolder+"\":##Dyms_LocalFileNames
+	5500	:	Delete File:##Dyms_LocalFileNames
+	1201F	: 	Copy File	: @@RetailerDownloadFTPUpdateEwayArch+"/"+@DateTimeFolder+"/"	:   @@RetailerDownloadFTPUpdateEway+"/"+$Name
+	1205F	: 	Delete File:   @@RetailerDownloadFTPUpdateEway+"/"+$Name
+	12753	:	Set	:	Dyms_CountrMsgVAr2	:	$$LocaleString:"Status : Process Completed! e-Waybill Details Updated Successfully!! "
+	12754	:		Log	:  ##Dyms_CountrMsgVAr2
+	12756	:	Else
+	12757	:	Set	:	Dyms_CountrMsgVAr3	:	$$LocaleString:"Status : Error While Importing!! Please Refer Log File " +$$LocaleString:@@MDUpdateEwaylogfilepatch
+	12758	:		Log: ##Dyms_CountrMsgVAr3
+	1040a	: 	Decrement: Errcount
+	12760	:	End If
+	
+	5455	: End Progress
+	5470	: End Batch Post
+	5480	: Else
+	5485	:	Set	:	DymsLocalHostPathUploadDown	:	@@MDUpdateEwayfileArchpatch
+	12700	: End If
+	12750	: End Walk
+	
+	12780	: Else
+	12790	: Log: "No Data Files In e-Waybill Folder"
+	12800	:	End If
+	12810	: Else
+	12820	: Msg Box	:	"Warning!" :	"Check Internet Availability!"
+	12830	:	End If
+	
+;;;;;;;;;;;;;;; Update E-Waybill Function ;;;;;;;;;;;;;;;
+[Function: UpdateGSTeWayBillDetailssync]
+	
+	Variable	: ValidUpTo		: String
+	Variable	: UpdatedDate	: String
+	006	:	Walk Collection:DymsJsonUpdateEwaybillCollection
+	007	:	Set	: ValidUpTo		:	$Dyms_Validupto  ;"01-05-2024 23:59:00" 
+	008	:	Set	: UpdatedDate	:	$Dyms_Updateddate ;"01-05-2024 12:14:00";
+	
+
+	005	: 		Insert Collection Object			: EwayBillDetails
+	010	:		Set Value	: BillNumber			: $Dyms_BillNumber ;"181771099289" 
+;	010a: Log:$Dyms_BillNumber
+	015	: 		Set Value	: BillDate 	      		: $$Date:$Dyms_BillDate ;"01/05/2024" ;
+	;020	:		Set Value	: ConsolidatedBillNumber: $tempGSTewayconsBillNumber
+	;025	:		Set Value	: ConsolidatedBillDate	: $tempGSTewayconsBillDate
+	030	: 		Set Value	: SubType           	: $$String:$Dyms_SubType;"Supply";$tempGSTewaysubType
+	035	: 		Set Value	: DocumentType      	: $$String:$Dyms_DocumentType;"Tax Invoice";$tempGSTewaydocumentType
+	;040	: 		Set Value	: BillStatus        	: $tempGSTewayStatus
+	045	: 		Set Value	: IgnoreGSTINValidation	: No
+	
+;	050	: 		Set Value	: ConsignorName			: $tempGSTewayConsignor
+;	055	:   	Set Value	: ConsignorGSTIN   		: $tempGSTewayconsignorTin
+;	060	: 		Set Value	: ConsignorAddressType	: ##tempConsignorAddrType
+;	125	:		Walk Collection	: GSTeWayConsignorAddress
+;	130	:			Insert Collection Object	: ConsignorAddress
+;	135	: 				Set Value	: ConsignorAddress		: $tempConsignorAddress
+;	140	:			SET Target	: ..
+;	145	:       END WALK
+	175	: 		Set Value	: ConsignorPlace		: $$String:$Dyms_ConsignorPlace;"Mangalore";$tempGSTewayFromPlace ;
+	180	: 		Set Value	: ConsignorPincode		: $$Number:$Dyms_ConsignorPincode;"560004" ;$tempGSTewayPincode
+;	185	: 		Set Value	: ConsignorStateName	: $$String:"Karnataka";$tempGSTewayconsignorState
+	190	:		Set Value	: ShippedFromState		: $$String:$Dyms_ShippedFromState;"Karnataka";$tempGSTewayconsShipFromState
+	
+	195	: 		Set Value	: ConsigneeName			: $Dyms_Consigneemailingname;"Shiv Ganga Marbles";"Nandana Idea Space" ;;$tempGSTewayConsignee
+;	200	:		Set Value	: ConsigneeAddressType	: ##tempConsigneeAddrType
+;	205	:		Walk Collection	: GSTeWayConsigneeAddress
+;	210	:			Insert Collection Object	: ConsigneeAddress
+	215	: 				Set Value	: ConsigneeAddress		:$Dyms_ConsigneeAddress;"Bangalore";$tempConsigneeAddress
+;	220	:			SET Target	: ..
+;	225	:       END WALK
+	255	: 		Set Value	: ConsigneePlace	    : $$STRING:$Dyms_ConsigneePlace;"Bilikere" ;;$tempGSTewayconsFromPlace
+    260	: 		Set Value	: ConsigneePincode		: $$STRING:$Dyms_ConsigneePincode;"560026";$tempGSTewayConsPincode
+ ;   265	: 		Set Value	: ConsigneeStateName    : $$STRING:"Delhi";$tempGSTewayConsState
+	270	:		Set Value	: ShippedToState		: $$STRING:$Dyms_ShippedToState;"Karnataka" ;;$tempGSTewayconsShipToState
+   275	: 		Set Value	: ConsigneeGSTIN	    : $Dyms_Consigneegstin;$$STRING:"29AAIPN3342A1ZZ" ;$tempGSTewayConsTin
+	276	:		Set Value	: Updateddate			: ##UpdatedDate
+	277	:		Set Value	: Validupto				: ##ValidUpTo 
+	278	:	End Walk
+	
+	281	:	Walk Collection:DymsJsonUpdateTransportCollection
+	280	:			Insert Collection Object	: TransportDetails
+	285	:				Set Value	: TransporterName	 : $$String:$Dyms_TransporterName
+    290	:				Set Value	: DocumentNumber	 : $Dyms_DocumentNumber ;"MDINV001" 
+    295	:				Set Value	: DocumentDate       : $$Date:$Dyms_DocumentDate ;"01/05/2024"
+    300	:				Set Value	: TransporterID      : $$String:$Dyms_TransporterID
+    305	:				Set Value	: TransportMode    	 : $$String:$Dyms_TransportMode ;"1 - Road"
+    310	:				Set Value	: VehicleNumber      : $$String:$Dyms_VehicleNumber ;"KA05AB2012"
+;	315	: 				Set Value	: OldVehicleType	 : $tempGSTewayVehicleType
+	317	: 				Set Value	: VehicleType		 : $$String:$Dyms_VehicleType ;"R - Regular"
+    320	:				Set Value	: Distance			 : $$Number:$Dyms_Distance ;"5.20" ;
+	321	:	End Walk	
+	325	:				Set Value	: IgnoreVehicleNoValidation: No	
+	326	: 				Set Value	: ISTRANSIDPENDING	 : No
+	327	: 				Set Value	: ISTRANSIDUPDATED	 : No
+	328	: 				Set Value	: ISEXPORTEDFORTRANSPORTERID : No
+	350	: 				Set Value	: IsPartBUpdated			: Yes
+	355	: 				Set Value	: IsExportedforPartB		: No	
+	360	: 				Set Value	: IsPartBPending			: No	
+	462	:				If		 	: NOT No
+	465 :					Set Value	: IGNOREPARTBVALIDATION		 : NO
+	449	:					Set Value	: IGNORETRANSIDVALIDATION	 : No
+	470	:				Else		
+	475	:					Set Value	: IGNOREPARTBVALIDATION		 : Yes
+	480	: 					Set Value	: IGNORETRANSIDVALIDATION	 : yes
+	485	:				END IF 		
+	530	:			Set Target	: ..
+	535	:  Set Target	: ..
+	540	: Return
+		
+
+[Collection:DymsJsonUpdateEwaybillCollection]
+	
+	Source Collection:DymsJsonEWayUpdateCollection	
+	Walk				:  EWAYBILL
+	compute				:	Dyms_VoucherNumberLed		:	$.AGSTREFSALENUMBER
+	compute				:	Dyms_BillNumber				:	$BillNumber
+	compute				:	Dyms_BillDate				:	$BillDate
+	Compute				:	Dyms_SubType				:	$SubType
+	Compute				:	Dyms_DocumentType			:	$DocumentType
+	Compute				:	Dyms_ConsignorPlace			:	$ConsignorPlace
+	Compute				:	Dyms_ConsignorPincode		:	$ConsignorPincode
+	Compute				: 	Dyms_ShippedFromState		: 	$ShippedFromState
+	Compute				:	Dyms_Consigneemailingname	:	$Consigneemailingname
+	Compute				:	Dyms_ConsigneeAddress		:	$ConsigneeAddress
+	Compute				:	Dyms_ConsigneePlace			:	$ConsigneePlace
+	Compute				:	Dyms_ConsigneePincode		:	$ConsigneePincode
+	Compute				:	Dyms_Consigneegstin			:	$Consigneegstin
+	Compute				: 	Dyms_ShippedToState			: 	$ShippedToState
+	Compute				:	Dyms_Validupto				:	$Validupto
+	Compute				:	Dyms_Updateddate			:	$Updateddate
+	Filter : EwaybillVchnoFilter
+
+[Collection:DymsJsonUpdateTransportCollection]
+	
+	Source Collection:DymsJsonEWayUpdateCollection	
+	Walk				:  Transport
+	compute				:	Dyms_VoucherNumberLed		:	$.AGSTREFSALENUMBER
+	compute				:	Dyms_TransporterName		:	$TransporterName
+	compute				:	Dyms_DocumentNumber			:	$DocumentNumber
+	Compute				:	Dyms_DocumentDate			:	$DocumentDate
+	Compute				:	Dyms_TransporterID			:	$TransporterID
+	Compute				:	Dyms_TransportMode			:	$TransportMode
+	Compute				:	Dyms_VehicleNumber			:	$VehicleNumber
+	Compute				: 	Dyms_VehicleType			: 	$VehicleType
+	Compute				:	Dyms_Distance				:	$Distance
+	Filter : EwaybillVchnoFilter
+
+[System:Formulae]
+	
+	EwaybillVchnoFilter:$Dyms_VoucherNumberLed=##Dyms_AGSTREFNUMBER

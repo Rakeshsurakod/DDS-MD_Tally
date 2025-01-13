@@ -1,0 +1,653 @@
+;;;;;;;;;;;;; Jai Shree Ram ;;;;;;;;;;;;;;;;;;;
+
+[Include:MDCustomer.txt]
+[Include:MDProduct.txt]
+[Include:MDSales.txt]
+[Include:Cancel Sales.txt]
+[Include:UpdateEwaybill.txt]
+
+[#Menu: Gateway of Tally]
+
+	Add:Key Item : Before: @@locQuit : MD Integration : I :Menu:MDDailySync
+	Add:Key Item : BLANK
+	
+[!Menu:MDDailySync]
+	
+	Title			: "MD Integration"
+	Key Item		: "MD Configuration" 		: M : Alter     	: MDConfigration
+	Item        	:BLANK 	
+	Key Item    	: "Customer Sync"      		: C : Call    		: Dyms_CustomeDownload:$$SyncTallyKPLManual="Yes"
+	Item			:BLANK
+	Key Item    	: "Product Sync"   		 	: P : Call    		: Dyms_ProductDownload:$$SyncTallyKPLManual="Yes"
+	Item			:BLANK
+	Key Item    	: "Sales Sync"   			: S : Call    		: Dyms_SalesDownload:$$SyncTallyKPLManual="Yes"
+	Item			:BLANK
+	Key Item    	: "E-Waybill Sync"   		: E : Call    		: UpdateEwaybill:$$SyncTallyKPLManual="Yes"
+	Item			:BLANK
+	Key Item    	: "Cancel Sales Sync"   	: S : Call    		: Dyms_CancelSalesDownload:$$SyncTallyKPLManual="Yes"
+	Item			:BLANK
+	;Key Item    	: "Delete Customer Archive " : D : Call    		: Dyms_CustomerArchivedelete:$$SyncTallyKPLManual="Yes"
+	
+[System: Event]
+
+	AutoUpload : Load Company:Yes	: CALL	: AutoUploadTimeFun
+	AutoKPLDownloadUpload : Timer : ($$SyncTallyKPLAuto="Yes") : CALL	: AutoUploadDownloadFun
+	
+[Function: AutoUploadTimeFun]
+	
+	Variable	:	timeinterval	: Number	: "35"
+	010	: Start Timer: AutoKPLDownloadUpload:(##timeinterval *60)
+	015	: If: $$DayOfWeek:$$MachineDate="Saturday" ; Wednesday
+	020	: 	Call	: Dyms_CustomerArchivedelete ;;;;;;; Function to delete Archive files
+	025	: End If
+	
+[Function: AutoUploadDownloadFun]
+	
+;	Variable	: counter1	: Date
+;	variable	: CurrentTime,Attention,AutoSyncJob:String	
+;	Variable	: CTTimeGivenHM		: String	: $$SyncTallyKPLAuto1
+;
+;	10	: Set   : CurrentTime : $$Time:$$SysInfo:SystemTime
+;	12	: Set 	: AutoSyncJob : $AutoSyncJob:Company:##SvcurrentCompany
+;	;20	: Set	: Attention : "Something Went Wrong at  " + ##AutoSyncJob +" Job \n Or All the Jobs are not Run \nPlease Contact Support Team!"
+;	;11:	Set	: CurrentTimeHM	:($$StringPart:##CurrentTime:0:2)+($$StringPart:##CurrentTime:3:2)
+;	30	: Set : counter1 : $AutoSyncDate:Company:##SvcurrentCompany
+;	22	: if  : ##CurrentTime=##CTTimeGivenHM ;and not ##counter1=$$SysInfo:SystemDate
+;	051 : Modify Object : (Company,$$CurrentSimpleCompany).AutoSyncDate.AutoSyncDate : $$SysInfo:SystemDate
+	101	:	Call	:	Dyms_CustomeDownload
+	404	:	Call	:	Dyms_ProductDownload
+	303	:	Call	:	Dyms_SalesDownload
+	606	:	Call	:	UpdateEwaybill
+	505	:	Call	:	Dyms_CancelSalesDownload
+	
+;	501	:	End If
+;	201	: if  : ##CurrentTime<##CTTimeGivenHM and not ##counter1=$$SysInfo:SystemDate
+;	050 : Modify Object : (Company,$$CurrentSimpleCompany).AutoSyncDate.AutoSyncDate : $$SysInfo:SystemDate
+;	100	:	Call	:	Dyms_CustomeDownload
+;	400	:	Call	:	Dyms_ProductDownload
+;	300	:	Call	:	Dyms_SalesDownload
+;	500	:	End If
+;	600	: If	: not ##AutoSyncJob = "Inventory" and ##control = Yes
+;;	601 : msg Box: "Attention" : ##Attention
+;	597	: Set   :  control: No
+;	;599	: Log	: ##Control
+;	602	: End If
+
+[System:Variable]
+	control : Yes
+	
+[Variable:control]
+	Type	: Logical
+	
+[Report:MDConfigration]
+	Title	:$$LocaleString:"MD Configuration"
+	Form	:MDConfigForm
+	Object	:Company
+	Variable: EnableAutoSyncvar
+	
+[Form:MDConfigForm]
+	
+	Width	:50% page
+	Height	:85% page
+	Parts	:MDConfigPart
+
+	On	:	Form Accept	:	Yes	:	Form Accept
+	On	:	Form Accept	:	Yes	:	Call	:	SyncTallyKPLWrite
+	On	:	Form Accept	:	Yes	:	Form Accept
+
+[Part:MDConfigPart]
+	Lines	: ConfigurationTitle, MDfilepathvalues, DYMSFTPAddress,DYMSFTPUserid, FTPPAswrdLine, MDCustomerFolderpath, +
+			  MDCustomerArchive, MDStockItemFolderpath, MDStockItemArchive, MDSalesPath, MDSalesArchive, MDCancelSalesPath, +
+			  MDCancelSalesArchive,MDUpdateEwayPath, MDUpdateEwayArchive, TallyINI Manual Sync,+
+			  AdvTallyINI Auto Sync Type, AdvTallyINI Auto Sync Time, VouchersConfig, CGSTLedgerName, SGSTLedgerName, + 
+			  IGSTLedgerName, RoundoffLedgerName;, MDGodownName
+	Scroll	:	Vertical
+	
+[Line:ConfigurationTitle]
+	SpaceTop:	1
+	Fields	: Form Sub Title 
+	Local	:Field	:Form Sub Title		:	Info	:"MD FTP And Folder Configration"
+	
+[Line	:DYMSFTPAddress]
+	
+	SpaceTop:	0.5
+	Fields	: Medium Prompt,DYMSFTPAddress
+	Local	:Field	:Medium Prompt 		:	Info	:"FTP Address :"
+	Local	:Field	:Medium Prompt		:  Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+ 
+[Field	:DYMSFTPAddress]
+	Use			:	Name Field
+	Style		:	Normal
+	Width		:	@@NameWidth+10
+	Align		:	Left
+    Case        : 	Normal
+	Storage		:	 FTPServerPath
+
+[Line	:DYMSFTPUserid]	
+	SpaceTop:	0.5
+	Fields	: Medium Prompt,DYMSFTPUserid
+	Local	:Field	:Medium Prompt		:	Info	:"UserId:"
+	Local	:Field	:Medium Prompt		:  Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+ 
+[Field	:DYMSFTPUserid]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+    Case    :   Normal
+	Storage	:	FTPServerUsr
+	
+[Line	:FTPPAswrdLine]	
+	SpaceTop:	0.5
+	Fields	: Medium Prompt,FTPPasswordFld
+	Local	:Field	:Medium Prompt		:	Info	:"Password:"
+	Local	:Field	:Medium Prompt		:  Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+
+[Field	:FTPPasswordFld]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+    Case    : 	Normal
+	Storage	:	FTPServerPwrd
+
+
+[Line:MDfilepathvalues]
+	
+	SpaceTop:	0.5
+	Fields	: Medium Prompt,MDFilepathprompt
+	Local	:Field	:Medium Prompt 		:	Info	:"JSON File Path :"
+	Local	:Field	:Medium Prompt		:  Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+ 
+[Field	:MDFilepathprompt]
+	Use			:	Name Field
+	Style		:	Normal
+	Width		:	@@NameWidth+20
+	Align		:	Left
+    Case        : 	Normal
+	Storage		:	MDFilepath	
+	
+[Line	:MDCustomerFolderpath]	
+	SpaceTop:	0.5
+	Fields	: Long Prompt,MDCustomerPath
+	Local	:Field	:Long Prompt		:	Info	:"Customer Master JSON Path :"
+	Local	:Field	:Medium Prompt		:  Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+
+[Field	:MDCustomerPath]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Storage	:	CustomerFolder
+	
+[Line	:MDCustomerArchive]	
+	SpaceTop:	0.5
+	Fields	: Long Prompt,MDCustomerArchivePath
+	Local	:Field	:Long Prompt		:	Info	:"Customer Master Archive Path :"
+	Local	:Field	:Medium Prompt		:  Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+
+[Field	:MDCustomerArchivePath]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Storage	:	CustomerArchiveFolder
+
+[Line	:MDStockItemFolderpath]	
+	SpaceTop:	0.5
+	Fields	: Long Prompt,MDStockitemPath
+	Local	:Field	:Long Prompt		:	Info	:"Stock Item Master JSON Path :"
+	Local	:Field	:Medium Prompt		:	Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+
+[Field	:MDStockitemPath]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Storage	:	StockItemFolder
+	
+[Line	:MDStockItemArchive]	
+	SpaceTop:	0.5
+	Fields	: Long Prompt,MDStockItemArchivePath
+	Local	:Field	:Long Prompt		:	Info	:"Stock Item Master Archive Path :"
+	Local	:Field	:Medium Prompt		:  	Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+
+[Field	:MDStockItemArchivePath]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Storage	:	StockItemArchiveFolder
+
+[Line	:MDSalesPath]	
+	SpaceTop:	0.5
+	Fields	: Long Prompt,MDSalesPath
+	Local	:Field	:Long Prompt		:	Info	:"Sales Transaction JSON Path:"
+	Local	:Field	:Medium Prompt		:  	Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+
+[Field	:MDSalesPath]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Storage	:	MDSalesFolder
+	
+[Line	:MDSalesArchive]	
+	SpaceTop:	0.5
+	Fields	: Long Prompt,MDSalesArchivePath
+	Local	:Field	:Long Prompt		:	Info	:"Sales Transaction Archive Path:"
+	Local	:Field	:Medium Prompt		:  Style	: Normal  
+	Local	:Field	:Long Prompt		:	Skip	:	Yes
+
+[Field	:MDSalesArchivePath]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Storage	:	MDSalesArchiveFolder
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+[Line	:MDCancelSalesPath]	
+	SpaceTop:	0.5
+	Fields	: Long Prompt,MDCancelSalesPath
+	Local	:Field	:Long Prompt		:	Info	:"Cancel Sales Transaction JSON Path:"
+	Local	:Field	:Medium Prompt		:  	Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+
+[Field	:MDCancelSalesPath]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Storage	:	MDCancelSalesFolder
+	
+[Line	:MDCancelSalesArchive]	
+	SpaceTop:	0.5
+	Fields	: Long Prompt,MDCancelSalesArchivePath
+	Local	:Field	:Long Prompt		:	Info	:"Cancel Sales Transaction Archive Path:"
+	Local	:Field	:Medium Prompt		:  Style	: Normal  
+	Local	:Field	:Long Prompt		:	Skip	:	Yes
+
+[Field	:MDCancelSalesArchivePath]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Storage	:	MDCancelSalesArchiveFolder
+
+;;;;;;;;;;;;;;;;;;;;;;; Ewaybill Update ;;;;;;;;;;;;;;;;
+[Line	:MDUpdateEwayPath]	
+	SpaceTop:	0.5
+	Fields	: Long Prompt,MDUpdateEwayPath
+	Local	:Field	:Long Prompt		:	Info	:"e-Waybill Update JSON Path:"
+	Local	:Field	:Medium Prompt		:  	Style	: Normal  
+	Local	:Field	:Medium Prompt		:	Skip	:	Yes
+
+[Field	:MDUpdateEwayPath]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Storage	:	MDUpdateEwayFolder
+	
+[Line	:MDUpdateEwayArchive]	
+	SpaceTop:	0.5
+	Fields	: Long Prompt,MDUpdateEwayArchivePath
+	Local	:Field	:Long Prompt		:	Info	:"e-Waybill Update Archive Path:"
+	Local	:Field	:Medium Prompt		:  Style	: Normal  
+	Local	:Field	:Long Prompt		:	Skip	:	Yes
+
+[Field	:MDUpdateEwayArchivePath]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Storage	:	MDUpdateEwayArchiveFolder
+
+[Line: TallyINI Manual Sync]
+	SpaceTop:	0.5
+	Field	: Long Prompt, TallyINI Manual Sync Type
+	Local	: Field	: Long Prompt		: Set as	: $$LocaleString:"Enable Manual Tally Sync?"
+
+[Field: TallyINI Manual Sync Type]
+
+	Use			: Logical Field
+	Set By Condition	:	Yes	:	$$SyncTallyKPLManual
+	Set as		: if $$SyncTallyKPLManual="No" then No else Yes
+	Storage		: EnableManualSync
+	Set Always	: Yes
+	Show Table	: Always
+	
+[Function	:	SyncTallyKPLManual]
+	
+	Variable	: LineStr						: String
+	0002	:If:$$IsFileExists:@@TallySynclogfile
+	0005	:	Set File Log On
+;	0007	: 	OPEN FILE : "C:\Program Files\TallyPrime (3.0.1)\TallySync.txt" 	: Text	: READ 
+	0007	: 	OPEN FILE : @@TallySynclogfile 	: Text	: READ 
+	0010	:	WHILE	: Not $$FileIsEOF
+;	0011	:	Msg Box	:	FileRead	:	$$FileRead
+	0020	: 			Set			: LineStr	: $$StringWordEx:$$FileRead:"~":1
+	0030	: 			If 			: NOT $$IsEmpty:##LineStr
+	0040	:				Return	:	##LineStr
+	0050	:			End If
+	0060	:	End While
+	0070	:	Close File
+	0080	:	Set File Log Off
+	0088	:	Else
+	0090	:	Set	:	LineStr	: "No"
+	0100	:	Return:##LineStr
+	12211	:   Log:##LineStr
+	0110	:	End If
+	
+[System	:	Formulae]
+	GetAppPath11			    : $$SysInfo:ApplicationPath
+	TallySynclogfile			: @@GetAppPath11+"\TallySync.txt"
+	Dyms_FilterFiles			: $Name contains ".json" OR $Name contains ".JSON"
+	MDDatapath					: $MDFilepath:Company:##SVCurrentCompany
+	
+ 	DymcsDataAdmin				: $FTPServerUsr:Company:##SVCurrentCompany;"fsm_ftp_usr"
+	DymcsDataPassword			: $FTPServerPwrd:Company:##SVCurrentCompany;"@FSM1234"
+	DymcsFTPName 				: $FTPServerPath:Company:##SVCurrentCompany;"ftp://34.121.104.138"
+	
+	RetailerDownloadFTPArch		:$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@MDCustomerFolderArc
+	RetailerDownloadFTP			:$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@MDCustomerFolder
+	RetailerDownloadFTPStockArch:$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@MDProductFolderArc
+	RetailerDownloadFTPStock	:$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@MDProductFolder
+	RetailerDownloadFTPSalesArch:$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@MDSalesFolderArc
+	RetailerDownloadFTPSales	:$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@MDSalesFolder
+	RetailerDownloadFTPCancelSalesArch:$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@MDCancelSalesFolderArc
+	RetailerDownloadFTPCancelSales	:$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@MDCancelSalesFolder
+	RetailerDownloadFTPUpdateEwayArch:$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@MDUpdateEwayFolderArc
+	RetailerDownloadFTPUpdateEway	:$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@MDUpdateEwayFolder
+	
+	MDCustomerFolder         	: $CustomerFolder:Company:##SVCurrentCompany
+	MDCustomerFolderArc       	: $CustomerArchiveFolder:Company:##SVCurrentCompany
+	MDCustomerfilepatch			: @@MDDatapath + "\" + @@MDCustomerFolder
+	MDCustomerfileArchpatch		: @@MDDatapath + "\" + @@MDCustomerFolderArc
+	Dyms_CustomerFilter			: $CUSTOMERNAMES=##Dyms_CustomerName
+	MDCustomerLogfilepatch		: @@MDCustomerfilepatch + "\Customerlog.txt"
+
+	MDProductFolder         	: $StockItemFolder:Company:##SVCurrentCompany
+	MDProductFolderArc       	: $StockItemArchiveFolder:Company:##SVCurrentCompany
+	MDProductfilepatch			: @@MDDatapath + "\" + @@MDProductFolder
+	MDProductfileArchpatch		: @@MDDatapath + "\" + @@MDProductFolderArc
+	Dyms_ServiceitemFilter		: $ITEMNAME=##Dyms_ServiceItemName
+	MDProductLogfilepatch		: @@MDProductfilepatch + "\StockItemLog.txt"
+
+	MDSalesFolder         		: $MDSalesFolder:Company:##SVCurrentCompany
+	MDSalesFolderArc       		: $MDSalesArchiveFolder:Company:##SVCurrentCompany
+	MDSalesfilepatch			: @@MDDatapath + "\" + @@MDSalesFolder
+	MDSalesfileArchpatch		: @@MDDatapath + "\" + @@MDSalesFolderArc
+	MDSaleslogfilepatch			: @@MDSalesfilepatch + "\SalesLog.txt"
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;Cancel Sales ;;;;;;;;;;;;;;;;;;;;;;;;;
+	MDCancelSalesFolder         : $MDCancelSalesFolder:Company:##SVCurrentCompany
+	MDCancelSalesFolderArc      : $MDCancelSalesArchiveFolder:Company:##SVCurrentCompany
+	MDCancelSalesfilepatch		: @@MDDatapath + "\" + @@MDCancelSalesFolder
+	MDCancelSalesfileArchpatch	: @@MDDatapath + "\" + @@MDCancelSalesFolderArc
+	MDCancelSaleslogfilepatch	: @@MDCancelSalesfilepatch + "\CancelSalesLog.txt"
+	
+;;;;;;;;;;;;;;;;;;;;;;;;;;; Update EWaybill ;;;;;;;;;;;;;;;;;;;;;;
+	MDUpdateEwayFolder         : $MDUpdateEwayFolder:Company:##SVCurrentCompany
+	MDUpdateEwayFolderArc      : $MDUpdateEwayArchiveFolder:Company:##SVCurrentCompany
+	MDUpdateEwayfilepatch		: @@MDDatapath + "\" + @@MDUpdateEwayFolder
+	MDUpdateEwayfileArchpatch	: @@MDDatapath + "\" + @@MDUpdateEwayFolderArc
+	MDUpdateEwaylogfilepatch	: @@MDUpdateEwayfilepatch + "\UpdateEwayLog.txt"
+		
+	MDIGSTLedger	         	: $IGSTLedgerName:Company:##SVCurrentCompany
+	MDCGSTLedger		       	: $CGSTLedgerName:Company:##SVCurrentCompany
+	MDSGSTLedger				: $SGSTLedgerName:Company:##SVCurrentCompany
+	MDRoundOFF					: $RoundoffLedgerName:Company:##SVCurrentCompany
+	
+[Function	:	SyncTallyKPLWrite]
+	Variable	:	Storefiledata1	:	String
+	Variable	:	Storefiledata2	:	String
+	Variable	:	Storefiledata3	:	String
+	0002:	Set	:	Storefiledata1	:	$EnableManualSync
+	0004:	Set	:	Storefiledata2	:	$EnableAutoSync
+	0005:	Set	:	Storefiledata3	:	$$String:$AutoSyncTime
+	0006:	Delete File:@@TallySynclogfile
+	0007: 	OPEN FILE : @@TallySynclogfile	: Text	: Write
+	0010	:	Write File Line	:	##Storefiledata1+"~"+##Storefiledata2+"~"+##Storefiledata3
+;	0010:	WHILE	: Not $$FileIsEOF
+;	0020		: 			Set			: LineStr	: $$StringWordEx:$$FileRead:"~":1
+;	0030		: 			If 			: NOT $$IsEmpty:##LineStr
+;	0040		:				Return	:	##LineStr
+;	0050		:			End If
+;	0060:	End While
+	0070:	Close Target File
+;	0080:	Set File Log Off
+
+[Line: AdvTallyINI Auto Sync Type]
+	SpaceTop:	0.5
+	Field	: Long Prompt, TallyINI Auto Sync Type
+	Local	: Field	: Long Prompt		: Set as	: $$LocaleString:"Enable Automatic Tally Sync?"
+
+[Field: TallyINI Auto Sync Type]
+
+	Use			: Logical Field
+	Set By Condition	:	Yes	:	$$SyncTallyKPLAuto
+	Set as		: (if $$SyncTallyKPLAuto="No" then No else Yes) and ##EnableAutoSyncvar
+	Storage		: EnableAutoSync
+	Set Always	: Yes
+	Show Table	: Always
+	Modifies	: EnableAutoSyncvar	: Yes
+
+
+[Function	:	SyncTallyKPLAuto]
+	
+	Variable	: LineStr						: String
+	0002	:If:$$IsFileExists:@@TallySynclogfile
+	0005	:	Set File Log On
+;	0007	: 	OPEN FILE : "E:\TallyProjects\New folder\Vigneshwara Paints\TDL\Phase I\Tamilword1.txt" 	: Text	: READ 
+	0007	: 	OPEN FILE : @@TallySynclogfile 	: Text	: READ 
+	0010	:	WHILE	: Not $$FileIsEOF
+	0020		: 			Set			: LineStr	: $$StringWordEx:($$StringWordEx:$$FileRead:"~":2):"~":1
+	0030		: 			If 			: NOT $$IsEmpty:##LineStr
+	0040		:				Return	:	##LineStr
+	0050		:			End If
+	0060	:	End While
+	0070	:	Close File
+	0080	:	Set File Log Off
+	0088	:	Else
+	0090	:	Set	:	LineStr	: "No"
+	0100	:	Return:##LineStr
+	0110	:	End If
+	
+	[Line: AdvTallyINI Auto Sync Time]
+		SpaceTop:	0.5
+		Field	: Long Prompt, TallyINI Auto Sync Time,TallyINI Auto Sync Date;,TallyINI Auto Sync Job,TallyINI Auto Sync All Job
+		Local	: Field	: Long Prompt		: Set as	: $$LocaleString:"Enter Auto Sync Time:"
+		Local	: Field	: Long Prompt		: Inactive	: NOT ##EnableAutoSyncvar
+		Invisible	: Yes
+		
+		[Field: TallyINI Auto Sync Time]
+
+			Use			: Short Name Field
+			Width		: 10
+			Type		: Time	;: Forced
+			Set By Condition	:	Yes	:	$$SyncTallyKPLAuto1
+			Set as		: if $$SyncTallyKPLAuto1="No" then No else Yes
+			Storage		: AutoSyncTime
+			Format		: "12 hour";##TSPLSmpCDTFormatVar;"H,M"
+			Set Always	: Yes
+			Inactive	: NOT ##EnableAutoSyncvar
+			
+		[Field:TallyINI Auto Sync Date]
+			Use	: Short Name field
+			Type: Date
+			Set as	: $$Value;$$SysInfo:SystemDate
+			Storage	: AutoSyncDate
+			Set Always: Yes
+			Skip	: Yes
+			
+[System:Variable]
+	EnableAutoSyncvar : No
+	
+[Variable: EnableAutoSyncvar]
+	
+	Type	: Logical
+	Persist	: Yes
+	
+[Function	:	SyncTallyKPLAuto1]
+	
+	Variable	: LineStr						: String
+	0002	:If:$$IsFileExists:@@TallySynclogfile
+	0005:	Set File Log On
+;	0007: 	OPEN FILE : "E:\TallyProjects\New folder\Vigneshwara Paints\TDL\Phase I\Tamilword1.txt" 	: Text	: READ 
+	0007: 	OPEN FILE : @@TallySynclogfile 	: Text	: READ 
+	0010:	WHILE	: Not $$FileIsEOF
+	0020		: 			Set			: LineStr	: $$StringWordEx:$$FileRead:"~":3
+	;0021		:			Log			: ##LineStr + "Fun"
+	0030		: 			If 			: NOT $$IsEmpty:##LineStr
+	0040		:				Return	:	##LineStr
+	0050		:			End If
+	0060:	End While
+	0070:	Close File
+	0080:	Set File Log Off
+	0088	:	Else
+	0090	:	Set	:	LineStr	: "No"
+	0100	:	Return:##LineStr
+	0110	:	End If
+	
+[Line	:VouchersConfig]
+	SpaceTop:	1
+	Fields	: Form Sub Title 
+	Local	:Field	:Form Sub Title		:	Info	:"Voucher Configuration"
+	
+[Line	:CGSTLedgerName]	
+	SpaceTop:	0.5
+	Fields	: Medium Prompt,CGSTLedgerName
+	Local	:Field	:Medium Prompt	:  Info	:"CGST Ledger Name :"
+	Local	:Field	:Medium Prompt	:  Style: Normal  
+	Local	:Field	:Medium Prompt	:  Skip	:	Yes
+
+[Field	:CGSTLedgerName]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Table	:	GST Ledger Table
+	Show Table	:	On First Key
+	Storage	:	CGSTLedgerName
+	
+[Line	:SGSTLedgerName]	
+	SpaceTop:	0.5
+	Fields	: Medium Prompt,SGSTLedgerName
+	Local	:Field	:Medium Prompt	:  Info	:"SGST Ledger Name :"
+	Local	:Field	:Medium Prompt	:  Style: Normal  
+	Local	:Field	:Medium Prompt	:  Skip	:	Yes
+
+[Field	:SGSTLedgerName]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Table	:	GST Ledger Table
+	Show Table	:	On First Key
+	Storage	:	SGSTLedgerName
+	
+[Line	:IGSTLedgerName]	
+	SpaceTop:	0.5
+	Fields	: Medium Prompt,IGSTLedgerName
+	Local	:Field	:Medium Prompt	:  Info	:"IGST Ledger Name :"
+	Local	:Field	:Medium Prompt	:  Style: Normal  
+	Local	:Field	:Medium Prompt	:  Skip	:	Yes
+
+[Field	:IGSTLedgerName]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Table	:	GST Ledger Table
+	Show Table	:	On First Key
+	Storage	:	IGSTLedgerName
+	
+[Line	:RoundoffLedgerName]	
+	SpaceTop:	0.5
+	Fields	: Medium Prompt,RoundoffLedgerName
+	Local	:Field	:Medium Prompt	:  Info	:"Roundoff Ledger Name :"
+	Local	:Field	:Medium Prompt	:  Style: Normal  
+	Local	:Field	:Medium Prompt	:  Skip	:	Yes
+
+[Field	:RoundoffLedgerName]
+	Use		:	Name Field
+	Style	:	Normal
+	Width	:	@@NameWidth+10
+	Align	:	Left
+	Table	:	Round Ledger Table
+	Show Table	:	On First Key
+	Storage	:	RoundoffLedgerName
+	
+;[Line	:MDGodownName]	
+;	SpaceTop:	0.5
+;	Fields	: Medium Prompt,MDGodownName
+;	Local	:Field	:Medium Prompt	:  Info	:"Godown Name :"
+;	Local	:Field	:Medium Prompt	:  Style: Normal  
+;	Local	:Field	:Medium Prompt	:  Skip	:	Yes
+;
+;[Field	:MDGodownName]
+;	Use		:	Name Field
+;	Style	:	Normal
+;	Width	:	@@NameWidth+10
+;	Align	:	Left
+;	Table	:	List of Godowns
+;	Show Table	:	On First Key
+;	Storage	:	MDGodownName
+
+[Collection : Round Ledger Table]
+
+	Align       : Right
+    FullHeight  : Yes
+    Format      : $$Name, 25 
+    With Alias  : Yes
+    Set as      : $Name
+    Title       : $$LocaleString:"List of Ledger Accounts"
+    Fetch       : Name, ReserveName
+    Type        : Ledger
+	Filter		: FilterRoundoffVal
+	
+[Collection : GST Ledger Table]
+
+    Use         : VLedTable
+    Type        : Ledger
+    Include     : Group:$$GroupDuties
+
+[System: Formula]
+	FilterRoundoffVal		: $Name Contains "Round"
+	
+[System:UDF]
+	
+	MDFilepath 					:	String	: 20001	
+	CustomerFolder				:	String	: 20002
+	CustomerArchiveFolder		:	String	: 20003
+	StockItemFolder				:	String	: 20004
+	StockItemArchiveFolder		:	String	: 20005
+	MDSalesFolder				:	String	: 20006
+	MDSalesArchiveFolder		:	String	: 20007
+	MDCancelSalesFolder			:	String	: 20008
+	MDCancelSalesArchiveFolder	:	String	: 20009
+	MDUpdateEwayFolder			:	String	: 20055
+	MDUpdateEwayArchiveFolder	:	String	: 20011
+	CGSTLedgerName				:	String	: 20013
+	SGSTLedgerName				:	String	: 20014
+	IGSTLedgerName				:	String	: 20015
+	RoundoffLedgerName			:	String	: 20016
+	;MDGodownName				:	String	: 20017
+	EnableManualSync			:	Logical	: 20020
+	EnableAutoSync				:	Logical	: 20025
+	AutoSyncDate				:	Date	: 20026
+	AutoSyncTime				:	Time	: 20028
+	VCHSalesQRCodeSt			:	String	: 20035
+	FTPServerPath				:	String	: 20040
+	FTPServerUsr            	:	String	: 20045
+	FTPServerPwrd           	:	String	: 20050

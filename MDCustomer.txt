@@ -1,0 +1,385 @@
+;;;;;;; Jai Shree Ram ;;;;;;;
+
+[Collection: Dyms_FTPDirectoryVoucherColl]
+	
+	Data Source : Directory	: @@RetailerDownloadFTP     
+	Filter		: Dyms_FilterFiles
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+[Collection: Dyms_DirectoryCustomerColl]
+	
+	Data Source : Directory	: @@MDCustomerfilepatch 
+	Filter		: Dyms_FilterFiles
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+
+;select $name from Dyms_DirectoryCustomerColl
+[Collection	:DymsJsonCustomerCollection]
+	
+	Data Source	: File JSON		: ##Dyms_LocalFileNames
+	JSON Object Path	: "CUSTOMER:1"
+	Fetch	: CUSTOMERTRADENAME
+
+;select $CUSTOMERTRADENAME from DymsJsonCustomerCollection
+
+[Collection:DymsJsonCustomerCollections]
+	
+	Source Collection:DymsJsonCustomerCollection
+	Compute		: CUSTOMERNAMES					:	$$String:$CUSTOMERTRADENAME
+	Walk		: ADDRESS
+	Compute		: ADDRESS1						: $ADDRESS1
+	Compute		: ADDRESS2						: $ADDRESS2
+	Compute		: ADDRESS3						: $ADDRESS3
+	Compute		: ADDRESS4						: $ADDRESS4
+	Filter		:Dyms_CustomerFilter
+	
+[Collection: LedgerGSTINCheck]
+
+    Use         : Alias Collection
+    Type        : Ledger
+    Title       : $$LocaleString:"List of Ledgers"
+	;Compute		: Partygstin	: $Partygstin
+	Fetch		: Name, Parent, Partygstin
+	Filter		: GSTINcheck
+;select $name, $Parent, $Partygstin from LedgerGSTINcheck
+
+[Function:Dyms_CustomeDownload]
+
+	Variable: Dyms_CustomerName			:String
+	Variable: Dyms_CustomerParent		:String
+	Variable: Dyms_CustomerMobNo		:String	
+	Variable: Dyms_CustomerState		:String	
+	Variable: Dyms_CustomerCountry		:String
+	;Variable: Dyms_GstApplicablefrom	:String
+	Variable: Dyms_Customer_Gstno		:String
+	Variable: Dyms_Customer_Tallygstin  :Logical
+	Variable: Dyms_Customer_Gsttype		:String
+	Variable: Dyms_Customer_ContactName :String
+	Variable: Dyms_Customer_Phoneno		:String
+	Variable: Dyms_Customer_Pincode		:String
+	Variable: Dyms_Customer_Address		:String
+	Variable: Dyms_Customer_Address2	:String
+	Variable: Dyms_Customer_Address3	:String
+	Variable: Dyms_Customer_Address4	:String
+	Variable: Dyms_LocalFileNames		:String
+	Variable: Dyms_Customer_Email		:String
+	Variable: Lednamefun				:String
+	Variable: Dyms_Customer_Count		:Number
+	Variable: Errorcount				:Number	: 0
+	Variable: Dyms_CountrMsgVAr1		:String
+	Variable: DymsLocalHostPathRetailer	: String
+	Variable: Mesg						:Logical: False
+	
+	000	:	Log: "Customer is running"	
+	020 :	Set			: DymsLocalHostPathRetailer			:	@@MDCustomerfilepatch
+	
+	034	:	If:$$IsInternetActive
+;	02  :   Modify Object : (Company,$$CurrentSimpleCompany).AutoSyncJob.AutoSyncJob : "Customer"
+;	03  :   Modify Object : (Company,$$CurrentSimpleCompany).AutoSyncAllJob.AutoSyncAllJob : ""
+	035	:	If:NOT $$IsEmptyCollection:Dyms_FTPDirectoryVoucherColl 
+	
+;;;;;;;;;;;;;;;;; FTP File Download into local Machine ;;;;;;;;;;;;;;;;;;;;
+	036	:	Set	:	Dyms_CountrMsgVAr1	:	$$NumItems:Dyms_FTPDirectoryVoucherColl 
+	037	:	Start Progress:(##Dyms_CountrMsgVAr1) : "Downloading Json Files From FTP" : "Please Wait" : ""
+ 	040 :	Walk Collection	:	Dyms_FTPDirectoryVoucherColl
+	056	:	Show Progress:$$LoopIndex:$$Sprintf:" %s %s":($$LocaleString:"Downloading.."):($Name)
+  	055 : 	Copy File		: ##DymsLocalHostPathRetailer	:   @@RetailerDownloadFTP+"/"+$Name
+	060	:	End Walk
+	061	:	End Progress
+	
+	065	: Walk Collection	:	Dyms_DirectoryCustomerColl
+	068	:	Set	:	Dyms_LocalFileNames	:	""
+	070	:	Set	:	Dyms_LocalFileNames	:	@@MDCustomerfilepatch+"\"+$Name
+	80	:	Set	:   Dyms_Customer_Count :   $$NumItems:DymsJsonCustomerCollection
+
+	85	: If:##Dyms_Customer_Count>0
+	88	: Start Batch Post:100
+	
+;;;;;;;;;;;;;;;; Customer Log File ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+	121	: 	Set File Log On
+	122	: 	OPEN FILE :@@MDCustomerLogfilepatch:Text:Write 
+	123	:	Write File Line	: "==========================================================================="
+	124	: 	Write File Line	: "Total Customer Ledger to Import - "+$$String:(##Dyms_Customer_Count)+" On "+$$String:($$MachineDate)+"-"+$$String:($$MachineTime)
+	125a:	Close Target File
+	126	:	Set File Log Off
+	
+	90 	: Start Progress: ##Dyms_Customer_Count :"Importing":"Customer Ledgers"	
+	
+	110s : Set:Dyms_CustomerName		:""
+	111a : Set:Dyms_CustomerParent		:""
+	
+	100 : Walk Collection:DymsJsonCustomerCollection
+	110 : Set : Dyms_CustomerName			:$CUSTOMERTRADENAME	
+	111 : Set : Dyms_CustomerParent			:$CUSTOMERGROUP
+	115 : Set : Dyms_CustomerMobNo			:$MOBILENO				
+	120 : Set : Dyms_CustomerState			:$STATE
+	125 : Set : Dyms_CustomerCountry		:$COUNTRY				
+;	130 : Set : Dyms_GstApplicablefrom		:$GSTAPPLICABLEFROM
+	133 : Set : Dyms_Customer_Email			:$EMAIL
+	135 : Set : Dyms_Customer_Gstno			:$GSTNO				
+	140 : Set : Dyms_Customer_Gsttype		:$GSTTYPE				
+	145 : Set : Dyms_Customer_ContactName	:$CONTACTPERSON			
+	150 : Set : Dyms_Customer_Phoneno		:$PHONENO		
+	155 : Set : Dyms_Customer_Pincode		:$PINCODE
+	170	: Set : Lednamefun					:$$IsEmpty:($Name:Ledger:##Dyms_CustomerName)
+	
+	158a : Set : Dyms_Customer_Address		:""
+	159b : Set : Dyms_Customer_Address2		:""
+	160c : Set : Dyms_Customer_Address3		:""
+	161d : Set : Dyms_Customer_Address4		:""
+	
+	156 : Walk Collection:DymsJsonCustomerCollections
+	158 : Set : Dyms_Customer_Address		:$ADDRESS1
+	159 : Set : Dyms_Customer_Address2		:$ADDRESS2
+	160 : Set : Dyms_Customer_Address3		:$ADDRESS3
+	161 : Set : Dyms_Customer_Address4		:$ADDRESS4
+	
+	207	: Set:Dyms_Customer_Tallygstin:$$NumItems:LedgerGSTINCheck>0
+	390	: If: not (##Lednamefun and ##Dyms_Customer_Tallygstin)
+	398 :   Do If    : ##Lednamefun      : New Object        : Ledger
+    400 :   Do If    : Not ##Lednamefun  : New Object        : Ledger:##Dyms_CustomerName    :Yes
+	418	:	Show Progress:$$LoopIndex:$$Sprintf:" %s %s":($$LocaleString:"Importing Customer  "):(##Dyms_CustomerName)
+	401	:	Set Value				    : 	Name			        : $$String:##Dyms_CustomerName
+	402 :	Set Value					:   Parent                  : If Not $$IsEmpty:##Dyms_CustomerParent Then ##Dyms_CustomerParent Else $Parent:Ledger:##Dyms_CustomerName
+	405	:   Set Value                   :   IsBillWiseOn            : Yes
+ 
+	iii	:	If    : not ##Lednamefun
+	407B:	Walk Collection:ListofDymcsLedgerUpdates
+	407C:	Delete CollectionObject:Address:1:Yes
+	407D:	End Walk
+	jjjj:	End If
+
+	408	: If: Not $$Isempty:##Dyms_Customer_Address
+	410	:	Insert Collection Object	:	ADDRESS
+	412	:	Set Value					: 	ADDRESS			        :	$$String:##Dyms_Customer_Address
+	414	:	Set Target					:	..
+	415	: End If
+		
+	420	: If: Not $$Isempty:##Dyms_Customer_Address2
+	427	:	Insert Collection Object	:	ADDRESS
+	430	:	Set Value					: 	ADDRESS			        :	$$String:##Dyms_Customer_Address2
+	435	:	Set Target					:	..
+	436	: End If
+
+	438	: If: Not $$Isempty:##Dyms_Customer_Address3
+	439	:	Insert Collection Object	:	ADDRESS
+	440	:	Set Value					: 	ADDRESS			        :	$$String:##Dyms_Customer_Address3
+	441	:	Set Target					:	..
+	442	: End If
+
+
+	444	: If: Not $$Isempty:##Dyms_Customer_Address4
+	445	:	Insert Collection Object	:	ADDRESS
+	446	:	Set Value					: 	ADDRESS			        :	$$String:##Dyms_Customer_Address4
+	447	:	Set Target					:	..
+	448	: End If
+
+	496	:	Set Value					: 	CountryofResidence		 :	##Dyms_CustomerCountry
+	500	:	Set Value					: 	LEDSTATENAME			 :	##Dyms_CustomerState
+	505	:	Set Value					: 	PinCode					 :	##Dyms_Customer_Pincode
+	525	:	Set Value					:	LedgerContact			 :	##Dyms_Customer_ContactName
+	530	:	Set Value					:	LedgerPhone				 :	##Dyms_Customer_Phoneno
+	535	:	Set Value					:	Email					 :	##Dyms_Customer_Email
+	540	:	Set Value					:	LedgerMobile			 :	##Dyms_CustomerMobNo
+	542	:	Set Value					:	GSTREGISTRATIONTYPE	 	 :	##Dyms_Customer_Gsttype
+	548	:	Set Value					:	PartyGSTIN			 	 :	##Dyms_Customer_Gstno
+
+	1000:   Save Target
+	1003: Set:Mesg:True
+	1005: End If
+	1010: Do If:not ##Mesg : Log:"Warning! Duplicate GSTIN Detected"
+	1020:	End Walk
+	
+;;;;;;;;;; Log File ;;;;;;;;;;;
+	1060 : IF:not $$LastResult
+	5004 :   Set File Log On
+	5005 :   OPEN FILE :@@MDCustomerLogfilepatch:Text:Write 
+	5010 :	 Write File Line	: $$String:($$LastError)
+	5020 :	 Write File Line	: $$String:"Error From :"+$$String:##Dyms_CustomerName
+	5030 :	 Set File Log Off
+	5040 :	 Close Target File
+	1040 : Increment: Errorcount
+	1188 : End If
+	1200 : End Walk
+	
+;;;;;;;;;;; Error Messages ;;;;;;;;;;;;;
+	LocalFormula:	DateTimeFolderNN	:	$$LocaleString:($$YearOfDate:$$MachineDate)+$$LocaleString:"-"+$$LocaleString:($$ZeroFill:($$MonthOfDate:$$MachineDate):2)+$$LocaleString:"-"+$$LocaleString:($$ZeroFill:($$DayOfDate:$$MachineDate):2)+$$LocaleString:"-"+$$LocaleString:($$StringFindAndReplace:($$MachineTime):":":"-")
+	9191 : If:##Errorcount=0
+	1201 : 	Copy File		: @@CustomerArchiveFldr + "\" + @DateTimeFolderNN + "\"	:   ##Dyms_LocalFileNames
+	1202 :  Delete File:##Dyms_LocalFileNames
+	1201F: 	Copy File		: @@RetailerDownloadFTPArch+"/"+@DateTimeFolderNN+"/"	:   @@RetailerDownloadFTP+"/"+$Name
+	1205F: 	Delete File:   @@RetailerDownloadFTP+"/"+$Name
+	1210 :	Log: "Status : Process Completed! Customer Ledgers Imported Successfully!! "
+	1205 : Else
+	1219 :	Log: "Status : Error While Importing!! Please Refer Log File  " +$$LocaleString:@@MDCustomerLogfilepatch
+	1040a: Decrement: Errorcount
+	ueue : End If
+	
+ 	1288 : End Progress
+	1330 : End Batch Post
+	1331 : Else
+;	1332 : Msg Box:"Warning":"No Customer"
+	1400 : End If
+	1410 : End Walk
+	
+	1278 :Else
+	1279 :Log	:"No Data File In Customer Folder"
+	1280 :	End If
+	1281 :Else
+	1282 :Msg Box	:"Warning!":"Check Internet Availability!!"
+	1283 :	End If
+	1285 : Return
+	
+[Collection:ListofDymcsLedgerUpdate]
+	
+	Type	: Ledger
+	Child Of: $$GroupSundryDebtors
+	Fetch	: Name,Address
+
+[Collection:ListofDymcsLedgerUpdates]
+	
+	Source Collection	: ListofDymcsLedgerUpdate
+	Compute				: Name			: $Name
+	Walk				: Address
+	Filter				: AddressNamFilter
+
+[System:Formulae]
+	AddressNamFilter 	: $Name=##Dyms_CustomerName
+	CustomerArchiveFldr	: ($$StringFindAndReplace:@@MDCustomerfileArchpatch:'/':'\')
+	Dyms_FilesDate		: $Name <= $$String:##YYYYMMDD	;;;;;;;;;;; 1 Month Filter
+	Dyms_FilesDate2		: $Name <= $$String:##YYYYMMDD2 and $Name!=$$String:"..";;;;;;;;;;;; 2 Months Filter
+	GSTINcheck			: $Partygstin= (If ##Dyms_Customer_Gstno="" then No Else ##Dyms_Customer_Gstno)
+;;;;;;;; Automatic Delete Archive Files ;;;;;;;;
+;;;;;;;;;; Customer Local Archive Folder ;;;;;;;;;
+[Collection: Dyms_FTPDirectoryVoucherCollDel]
+	
+	Data Source : Directory	: @@CustomerArchiveFldr
+	Filter		: Dyms_FilesDate2
+	Fetch		: $Name
+
+[Collection: Dyms_FTPDirectoryVoucherCollDelftp]
+	
+	Data Source : Directory	: @@RetailerDownloadFTPArch     
+	Filter		: Dyms_FilesDate
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+;;;;;;;;;;;;;  Product Archive Local And FTP collection ;;;;;;;;;;;
+[Collection: Dyms_FTPDirectoryProductCollDel]
+	 
+	Data Source : Directory	: @@MDProductfileArchpatch
+	Filter		: Dyms_FilesDate2
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+[Collection: Dyms_FTPDirectoryProdctCollDelftp]
+	
+	Data Source : Directory	: @@RetailerDownloadFTPStockArch     
+	Filter		: Dyms_FilesDate
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+;;;;;;;;;;;;;  Sales Archive Local And FTP collection ;;;;;;;;;;;
+[Collection: Dyms_FTPDirectorySalesCollDel]
+	 
+	Data Source : Directory	: @@MDSalesfileArchpatch
+	Filter		: Dyms_FilesDate2
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+[Collection: Dyms_FTPDirectorySalesCollDelftp]
+	
+	Data Source : Directory	: @@RetailerDownloadFTPSalesArch     
+	Filter		: Dyms_FilesDate
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+[Function:Dyms_CustomerArchivedelete]
+	
+	Variable	: FolderMonth	: Date	: $$PrevMonth:$$Machinedate
+	Variable	: YYYYMMDD		: String: $$YYYYMMDDDateFormat1:##FolderMonth:"-"
+	Variable	: Folder2Month	: Date	: $$PrevMonth:$$PrevMonth:$$Machinedate
+	Variable	: YYYYMMDD2		: String: $$YYYYMMDDDateFormat1:##Folder2Month:"-"
+	
+;;;;;;;;;;; Local Customer Archive file Delete ;;;;;;;;;;;;;;;;;;;;
+	000 : If: $$NumItems:Dyms_FTPDirectoryVoucherCollDel>0
+	005	: 	Walk Collection:Dyms_FTPDirectoryVoucherCollDel
+;	010	: 	Log: $$NumItems:Dyms_FTPDirectoryVoucherCollDel
+;	020	: 	Log:##YYYYMMDD2 + "    "  + $Name
+;	025	: 	Log:@@CustomerArchiveFldr+"\"+$Name
+	030	: 	Delete File:@@CustomerArchiveFldr+"\"+$Name
+	035	: 	End Walk
+	040	: End If
+;;;;;;;;;;;;; FTP Customer FTP Archive file Delete ;;;;;;;;;;;;;;;;;;;;;;
+	045 : If: $$NumItems:Dyms_FTPDirectoryVoucherCollDelftp>0
+	050	: 	Walk Collection:Dyms_FTPDirectoryVoucherCollDelftp
+;	055	: 	Log: $$NumItems:Dyms_FTPDirectoryVoucherCollDelftp
+;	060	: 	Log:##YYYYMMDD
+;	065	: 	Log:@@RetailerDownloadFTPArch+"/"+$Name
+	070	: 	Delete File:@@RetailerDownloadFTPArch+"/"+$Name
+	075	: 	End Walk
+	080	: End If
+;;;;;;;;;;; Local Product Archive File Delete	
+	100 : If: $$NumItems:Dyms_FTPDirectoryProductCollDel>0
+	105	: 	Walk Collection:Dyms_FTPDirectoryProductCollDel
+;	110	: 	Log: $$NumItems:Dyms_FTPDirectoryProductCollDel
+;	120	: 	Log:##YYYYMMDD2
+;	125	: 	Log:@@MDProductfileArchpatch+"\"+$Name
+	130	: 	Delete File:@@MDProductfileArchpatch+"\"+$Name
+	135	: 	End Walk
+	140	: End If
+;;;;;;;;;;;;; FTP Product FTP Archive file Delete ;;;;;;;;;;;;;;;;;;;;;;
+	145 : If: $$NumItems:Dyms_FTPDirectoryProdctCollDelftp>0
+	150	: 	Walk Collection:Dyms_FTPDirectoryProdctCollDelftp
+;	155	: 	Log: $$NumItems:Dyms_FTPDirectoryProdctCollDelftp
+;	160	: 	Log:##YYYYMMDD
+;	165	: 	Log:@@RetailerDownloadFTPStockArch+"/"+$Name
+	170	: 	Delete File:@@RetailerDownloadFTPStockArch+"/"+$Name
+	175	: 	End Walk
+	180	: End If
+	
+;;;;;;;;;;; Local Sales Archive file Delete ;;;;;;;;;;;;;;;;;;;;
+	300 : If: $$NumItems:Dyms_FTPDirectorySalesCollDel>0
+	305	: 	Walk Collection:Dyms_FTPDirectorySalesCollDel
+;	310	: 	Log: $$NumItems:Dyms_FTPDirectorySalesCollDel
+;	320	: 	Log:##YYYYMMDD2
+;	325	: 	Log:@@MDSalesfileArchpatch+"\"+$Name
+	330	: 	Delete File:@@MDSalesfileArchpatch+"\"+$Name
+	335	: 	End Walk
+	340	: End If
+;;;;;;;;;;;;; FTP Sales FTP Archive file Delete ;;;;;;;;;;;;;;;;;;;;;;
+	345 : If: $$NumItems:Dyms_FTPDirectorySalesCollDelftp>0
+	350	: 	Walk Collection:Dyms_FTPDirectorySalesCollDelftp
+;	355	: 	Log: $$NumItems:Dyms_FTPDirectorySalesCollDelftp
+;	360	: 	Log:##YYYYMMDD
+;	365	: 	Log:@@RetailerDownloadFTPSalesArch+"/"+$Name
+	370	: 	Delete File:@@RetailerDownloadFTPSalesArch+"/"+$Name
+	375	: 	End Walk
+	380	: End If
+
+;;;;;;;;;;; Function to covert Date into YYYYMMDD Date format ;;;;;;;;;;;;;
+[Function: YYYYMMDDDateFormat1]
+
+	Parameter   : ParamInputDate        : Date
+	Parameter   : ParamSeparator        : String
+	Variable    : TempVarYear           : String
+	Variable    : TempVarMonth          : String
+	Variable    : TempVarDate           : String
+
+	Returns     : String
+
+	01  : If        : NOT $$IsEmpty:##ParamInputDate
+	02  :   Set     : TempVarYear       : $$Zerofill:($$YearofDate:##ParamInputDate):4
+	03  :   Set     : TempVarMonth      : $$Zerofill:($$MonthofDate:##ParamInputDate):2
+	04  :   Set     : TempVarDate       : $$Zerofill:($$DayofDate:##ParamInputDate):2
+	05  :   Return  : $$String:##TempVarYear + $$String:##ParamSeparator + $$String:##TempVarMonth + $$String:##ParamSeparator + $$String:##TempVarDate
+	06  : End If
+	07  : Return    : ""

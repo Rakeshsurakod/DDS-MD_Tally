@@ -1,0 +1,774 @@
+;;;;;;;;;;;;;;; Jai Shree Ram ;;;;;;;;;;;;;;;;;
+
+[Collection: Dyms_FTPDirectorySalesColl]
+	
+	Data Source : Directory	: @@RetailerDownloadFTPSales     
+	Filter		: Dyms_FilterFiles
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+[Collection: Dyms_DirectoryVoucherCollSales]
+	
+	Data Source : Directory	: @@MDSalesfilepatch     
+	Filter		: Dyms_FilterFiles
+	Format		: $Name, 25
+	Title       : "File Listing"
+	Sub Title	: "File Name", "File Size", "Read Only"
+	
+;Select $name from Dyms_DirectoryVoucherCollSales
+
+[Collection	:DymsJsonSalesCollection]
+	
+		Data Source:File JSON		: ##Dyms_LocalFileNames  
+   	  	JSON Object Path	: "SALES:1"
+		
+;Select $SALENUMBER from DymsJsonSalesCollection
+
+[Collection:DymsJsonSalesInvCollections]
+	
+	Source Collection:DymsJsonSalesCollection
+	Walk				:   INVENTORY
+	compute				:	Dyms_VoucherNumberInv		:	$.SALENUMBER
+	compute				:	Dyms_SALELEDGERNAME			:	$.SALELEDGERNAME
+	Compute				:	Dyms_PRODUCTCODE			:	$SERVICENAME
+	Compute				:	Dyms_QUANTITY				:	$QUANTITY
+	Compute				:	Dyms_VoucherRATE			:	$RATE
+	Compute				:	Dyms_VoucherdiscPERC		:	$DISCPERC
+	Compute				:	Dyms_VoucherVchAmount		:	$TAXABLEAMOUNT
+	Walk				:	SERVICEDESC
+	Compute 			:	Dyms_Desc1					:	$Desc1
+    Compute 			:	Dyms_Desc2					:	$Desc2
+	Compute				:	Dyms_Desc3					:	$Desc3
+	Compute				:	Dyms_Desc4					:	$Desc4
+	Compute				:	Dyms_Desc5					:	$Desc5
+	Filter:SalesInvVchnoFilter
+	
+[Collection:DymsJsonSalesLedCollections]
+	
+	Source Collection:DymsJsonSalesCollection	
+	Walk				:  TAXDETAILS
+	compute				:	Dyms_VoucherNumberLed		:	$.SALENUMBER
+	compute				:	Dyms_VoucherDateLed			:	$.CREATEDDATE
+	Compute				:	Dyms_IGST					:	$IGSTAMOUNT
+	Compute				:	Dyms_CGST					:	$CGSTAMOUNT
+	Compute				:	Dyms_SGST					:	$SGSTAMOUNT
+;	Compute				:	Dyms_TransportCharges		:	$TRANSPORTCHARGES
+;	Compute				: 	Dyms_LABOURCharges			: 	$LabourCharges
+	Compute				:	Dyms_ROUNDOFF				:	$ROUNDOFF
+	Filter : SalesLedVchnoFilter
+
+[System:Formulae]
+	
+	SalesInvVchnoFilter:$Dyms_VoucherNumberInv=##Dyms_VoucherNumberVar
+	SalesLedVchnoFilter:$Dyms_VoucherNumberLed=##Dyms_VoucherNumberVar
+
+
+;;;;;;;;;;; e-invoice QR Code ;;;;;;;;;;;;;;
+[#System:Formulae]
+		eInvoiceQRCValue				: If ##IseInvPSPrintAfterSave Then ##eInvPSIRNQrCode Else +
+										  If $$IsEmpty:$IRNQRCode then $VCHSalesQRCodeSt Else $IRNQRCode
+	
+;;;;;;;;;; Sales Creation ;;;;;;;;;;;;;;;;;;		
+[Function:Dyms_SalesDownload]
+	
+	Variable	: 	DymsLocalPathSalesDownload		: String
+	Variable	: 	DymsFTPPathSalesDownloadJSON	: String
+	
+	Variable	:	DymsSalesLogCount				:Number
+	Variable	:	Dyms_VoucherNumberVar			:STring
+	Variable	:	Dyms_VoucherDateVar				:STring
+;	Variable	:	Dyms_SERVICEFFROMDATE			:String
+;	Variable	:	Dyms_SERVICETODATE				:String
+	Variable	:	Dyms_PartyMailingName			:String
+	Variable	:	Dyms_PartyNameEVar				:Logical	
+	Variable	:	Dyms_PartyNameVar				:STring	
+	Variable	:	Dyms_PartyMobNoVar				:STring	
+	Variable	:	Dyms_PartyStateVar				:STring	
+	Variable	:	Dyms_PartyAddressVar			:STring	
+	Variable	:	Dyms_PartyCityVar				:STring	
+	Variable	:	Dyms_PartyEmailVar				:STring	
+	Variable	:	Dyms_PartyCountryVar			:STring	
+	Variable	:	Dyms_PartyVCHAMOUNTVar			:STring	
+	Variable	:	Dyms_PartyGSTINVar				:STring	
+	Variable	:	Dyms_PartyPINCODEVar			:STring	
+	
+	Variable	:	Dyms_PartyGSTINtally			:Number	
+	Variable	:	TallyLedgername					:String
+	Variable	:	Dyms_IRNVar						:STring	
+    Variable	:   Dyms_IRNAckDateVar	            :STring	
+    Variable	:   Dyms_IRNAckNoVar	            :STring	
+    Variable	:   Dyms_IRNQRCodeVar	            :STring
+	Variable	:	Dyms_REMARKNOTEVar				:String
+	
+	Variable	:	Dyms_SVProductCodeVar				:String
+	Variable	:	Dyms_SALELEDGERNAME					:String
+	Variable	:	Dyms_SVQuantityVar					:String
+	Variable	:	Dyms_SVRateVar						:Number
+	Variable	:	Dyms_SVoucherGrossAmtVar			:String
+	Variable	:	Dyms_SVoucherInvAmtVar				:String
+	Variable	:	Dyms_DiscountPercsVar				:String
+	Variable	:	Dyms_LocalFileNames					:String
+
+	Variable	: 	Errcount							:Number: 0 
+	Variable	:	Dyms_SVoucherCGSTAmtVar				:Number
+	Variable	:	Dyms_SVoucherSGSTAmtVar				:Number
+	Variable	:	Dyms_SVoucherIGSTAmtVar				:Number
+;	Variable	:	Dyms_SVoucherLabourCharges			:String
+;	Variable	:	Dyms_SVoucherTransportCharges		:String
+	Variable	:	Dyms_SVoucherRoundoffAmtVar			:String
+	Variable	:	Dyms_CountrMsgVAr1,Dyms_CountrMsgVAr2,Dyms_CountrMsgVAr3:String
+ 	Variable	: 	DymsLocalHostPathRetailer,DymsFTPPathRetailer			: String				
+	Variable	:   DymsLocalHostPathUploadDown			:String				
+	Variable	:	Dyms_Desc1 							:String
+	Variable	:   Dyms_Desc2 							:String
+	Variable	:	Dyms_Desc3							:String
+    Variable    :   Dyms_Desc4              			:String
+    Variable    :   Dyms_Desc5              			:String
+	
+	000		: 	Log: "Sales Is Running"	
+ 	020 	:	Set			: DymsLocalHostPathRetailer		:	@@MDSalesfilepatch
+ ;	030 	:	Set			: DymsFTPPathRetailer			:$$IsEmptyCollection:Dyms_DirectoryVoucherCollSales;$$MakeFTPName:@@DymcsFTPName:@@DymcsDataAdmin:@@DymcsDataPassword:@@DymcsFTPCustomerFolder
+;	032		:	Msg Box	:	DymsFTPPathRetailer	:	##DymsFTPPathRetailer
+	034		:	If:$$IsInternetActive
+;	023  	:   Modify Object : (Company,$$CurrentSimpleCompany).AutoSyncJob.AutoSyncJob : "Sales"
+;	03  	:   Modify Object : (Company,$$CurrentSimpleCompany).AutoSyncAllJob.AutoSyncAllJob : ""
+	035		:	If:NOT $$IsEmptyCollection:Dyms_FTPDirectorySalesColl 
+
+;;;;;;;;;;;;;;;;; FTP File Download into local Machine ;;;;;;;;;;;;;;;;;;;;
+	036		:	Set	:	Dyms_CountrMsgVAr1	:	$$NumItems:Dyms_FTPDirectorySalesColl 
+	037		:	Start Progress:(##Dyms_CountrMsgVAr1) : "Downloading Json Files From FTP" : "Please Wait" : ""
+ 	040 	:	Walk Collection	:	Dyms_FTPDirectorySalesColl
+	056		:	Show Progress:$$LoopIndex:$$Sprintf:" %s %s":($$LocaleString:"Downloading..		"):($Name)
+  	055 	: 	Copy File		: ##DymsLocalHostPathRetailer	:   @@RetailerDownloadFTPSales+"/"+$Name
+	060		:	End Walk
+	061		:	End Progress
+	
+	065		:	Walk Collection	:	Dyms_DirectoryVoucherCollSales
+	068		:	Set	:	Dyms_LocalFileNames	:	""
+	070		:	Set	:	Dyms_LocalFileNames	:	@@MDSalesfilepatch+"\"+$Name
+	100 	:   Set :	DymsSalesLogCount:$$NumItems:DymsJsonSalesCollection
+
+	105		:   If:##DymsSalesLogCount>0
+	120		:  	Start Batch Post:100
+	
+;;;;;;;;;;;;;;;; Sales Log File write ;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+	121		: 	Set File Log On
+	122		: 	OPEN FILE :@@MDSaleslogfilepatch:Text:Write 
+	123		:	Write File Line	: "==========================================================================="
+	124		: 	Write File Line	: "Total Sales Vouchers to Import - "+$$String:(##DymsSalesLogCount)+" On "+$$String:($$MachineDate)+"-"+$$String:($$MachineTime)
+	125		:	Close Target File
+	126		:	Set File Log Off
+	
+	jjs		: 	Set:Dyms_PartyGSTINVar:""
+	137a	:	Set: Dyms_PartyNameVar:""	
+	127		:	Set	:	Dyms_CountrMsgVAr1	:	$$NumItems:DymsJsonSalesCollection 
+	128		:	Start Progress:(##Dyms_CountrMsgVAr1) : ($$LocaleString:"Importing Sales") : "Please wait" : ""
+	130		:	Walk Collection:DymsJsonSalesCollection
+	135		:	Set: Dyms_VoucherNumberVar		:$$String:$SALENUMBER;Dyms_VoucherVoucherNumber
+	136		:	Set: Dyms_VoucherDateVar		:$CREATEDDATE;Dyms_VoucherDate
+;	136b	:	Set: Dyms_SERVICETODATE			:$SERVICETODATE
+	137		:	Set: Dyms_PartyNameVar			:$CUSTOMERLEDGERNAME;Dyms_PartyName	
+	136a	:	Set: Dyms_PartyMailingName		:$CUSTOMERLEDGERDESC
+	138		:	Set: Dyms_PartyMobNoVar			:$CUSTOMERMOBILENO;Dyms_PartyMobNo
+	139		:	Set: Dyms_PartyStateVar			:If $CUSTOMERSTATE = "null" Then " Not Applicable" Else $CUSTOMERSTATE;Dyms_PartyState
+	140		:	Set: Dyms_PartyAddressVar		:$CUSTOMERADDRESS;Dyms_PartyAddress
+	141		:	Set: Dyms_PartyCityVar			:$CUSTOMERCITY;Dyms_PartyCity
+	142		:	Set: Dyms_PartyEmailVar			:$CUSTOMEREMAILADDRESS;Dyms_PartyEmail
+	143		:	Set: Dyms_PartyCountryVar		:$CUSTOMERCOUNTRY;Dyms_PartyCountry
+	144		:	Set: Dyms_PartyVCHAMOUNTVar		:$SALEAMOUNT;Dyms_PartyVCHAMOUNT
+	144A	:	Set: Dyms_PartyGSTINVar			:If $CUSTOMERGSTIN="" Then "No" Else $CUSTOMERGSTIN
+	144b	:	Set: Dyms_PartyPINCODEVar		:$CUSTOMERPINCODE
+;	145		:	Set: Dyms_VoucherTypeVar1Var	:$VOUCHERTYPE
+	145a	:	Set: Dyms_PartyNameEVar			:$$IsEmpty:($Name:Ledger:##Dyms_PartyNameVar)
+	142p	:	Set: Dyms_IRNVar				:$IRN;"06ed1d060ca35202749c6b4985772f7b5f29573663f05b596e7984221fef2b9f"
+    143q	:	Set: Dyms_IRNAckDateVar			:$IRNACKDATE;"20220908"
+    144r	:	Set: Dyms_IRNAckNoVar			:$IRNACKNO;"252210021334919"
+    145s	:	Set: Dyms_IRNQRCodeVar			:$IRNQRCODE
+	146d	:	Set: Dyms_REMARKNOTEVar			:$NARRATION
+	1441	:	Set: Dyms_PartyGSTINtally		:$$NumItems:LedgerGSTIN
+	
+;;;;;;;;;; PARTY LEDGER CREATION ;;;;;;;;;;;;;
+	146		:If:##Dyms_PartyNameEVar  and $$IsEqual:##Dyms_PartyGSTINtally:$$Number:"0" 
+	;147 	:	Msg Box	:	Dyms_PartyNameVar	:	($Name:Ledger:##Dyms_PartyNameVar)
+	148		:	New Object	:	Ledger
+	150		:	Set Value	:	NAme	:	##Dyms_PartyNameVar
+	152   	:	Set Value	:   Parent  :	"Sundry Debtors"
+	154		:   Set Value   :   IsBillWiseOn            : Yes
+	
+	156		:If: Not $$Isempty:##Dyms_PartyAddressVar
+	158		:	Insert Collection Object	:	ADDRESS
+	160		:	Set Value					: 	ADDRESS			        :	$$String:##Dyms_PartyAddressVar
+	162		:	Set Target					:	..
+	164		:End If
+	166		:If: Not $$Isempty:##Dyms_PartyCityVar
+	168		:	Insert Collection Object	:	ADDRESS
+	170		:	Set Value					: 	ADDRESS			        :	$$String:##Dyms_PartyCityVar
+	172		:	Set Target					:	..
+	174		:End If
+	
+	176		:	Set Value					: 	CountryofResidence		 :	##Dyms_PartyCountryVar
+	178		:	Set Value					: 	LEDSTATENAME			 :	##Dyms_PartyStateVar
+	180		:	Set Value					:	LedgerMobile			 :	##Dyms_PartyMobNoVar
+	182		:	Set Value					:	EMail			 		 :	##Dyms_PartyEmailVar
+	183		: 	Set Value					: 	Partygstin				 :  If ##Dyms_PartyGSTINVar="No" then "" Else ##Dyms_PartyGSTINVar
+	183A	: 	Set Value					: 	PinCode					 :  ##Dyms_PartyPINCODEVar
+	184     :   Save Target 
+	185		: End If
+	;150:Msg Box:Dyms_PartyNameVar:##Dyms_VoucherTypeVar1Var
+	
+;;;;;;;; Voucher Creation	;;;;;;;;;;;;
+	186  	:  New Object		: Voucher	
+	187 	:  Set				: SVViewName				:  $$SysName:InvVchView
+	188 	:  Set Value		: PERSISTEDVIEW				:  ##SVViewName
+	190		:  SET VALUE		: Date						:  $$Date:##Dyms_VoucherDateVar
+	193		:  Set Value		: VoucherNumber				:  $$String:##Dyms_VoucherNumberVar
+	198  	:  SET VALUE		: VoucherTypeName			:  $$String:"MD Sales"
+;	199		:  Set Value		: BasicOrderref				:  ##Dyms_SERVICEFFROMDATE
+	200		:  SET VALUE		: IsPostDated				:  No
+	;202		:  SET VALUE		: IsOptional				:  Yes
+	204		:  SET VALUE		: IsInvoice					:  Yes
+	
+;;;;;;; Consignee details ;;;;;;;;;;;;
+
+	800		: Walk Collection:DymsJsonSalesEwaybillCollection
+	805		:  Set Value		: BasicBuyerName			:	$Dyms_Consigneemailingname
+	806		:  Set Value		: BasicBuyerAddress			:	$Dyms_ConsigneeAddress
+	1660	:If: Not $$Isempty:##Dyms_PartyCityVar
+	1680	:	Insert Collection Object	:	BasicBuyerAddress
+	1700	:	Set Value					: 	BasicBuyerAddress       :	$$String:$Dyms_ConsigneePlace;##Dyms_PartyCityVar
+	1720	:	Set Target					:	..
+	1740	:End If
+	810		:  Set Value		: Consigneemailingname		:  	$Dyms_Consigneemailingname;"Shiv Ganga Marbles"
+	815		:  Set Value		: Consigneegstin			:  	$Dyms_Consigneegstin;	"07BAGPG3952C1Z1"
+	816		:  Set Value		: ConsigneePincode			:  	$Dyms_ConsigneePincode;"110085"
+	820		:  Set Value		: ConsigneeStateName		:	$Dyms_ShippedToState; beceause both consignee and shipedto states are same
+	825		: End Walk
+
+;;;;;;; Party Details;;;;;;;;;;;;
+	uwuuw	: Set:TallyLedgername:""
+	8281	: Walk Collection: LedgerGSTIN 
+	2832	: Set:TallyLedgername:If $$IsEmpty:##TallyLedgername then $Name else ##TallyLedgername
+	8375	: End Walk	
+	
+	8291	: If: ##Dyms_PartyGSTINtally>0 and Not $$IsEqual:##Dyms_PartyNameVar:##TallyLedgername
+	8301	:  Set Value		: PartyLedgername			:  ##TallyLedgername
+	8301j	:  Set Value		: Partymailingname			:  ##Dyms_PartyMailingName
+	8311	:  Set Value		: Partyname					:  ##TallyLedgername ;$Name 
+	8351	:  Set Value		: PartyGSTIN				:  $(Ledger, ##TallyLedgername).Partygstin 
+	8361	:  Set Value		: PartyPincode				:  $(Ledger, ##TallyLedgername).PinCode 
+	8371	:  Set Value		: Address					:  $(Ledger, ##TallyLedgername).Address[1].Address
+	215k  	:  Set Value   		: StateName    				:  $(Ledger, ##TallyLedgername).LedStatename 
+	
+	16622	:If: Not $$Isempty:$(Ledger, ##TallyLedgername).Address[2].Address
+	16822	:	Insert Collection Object	:	Address
+	17022	:	Set Value					: 	Address       :	$$String:$(Ledger, ##TallyLedgername).Address[2].Address
+	17222	:	Set Target					:	..
+	17422	:End If
+	
+	16623	:If: Not $$Isempty:$(Ledger, ##TallyLedgername).Address[3].Address
+	16823	:	Insert Collection Object	:	Address
+	17023	:	Set Value					: 	Address       :	$$String:$(Ledger, ##TallyLedgername).Address[3].Address
+	17223	:	Set Target					:	..
+	17423	:End If
+	
+	8380	: Else
+	830		:  Set Value		: PartyLedgername			:  ##Dyms_PartyNameVar;"Shiv Ganga Marbles"
+	830A	:  Set Value		: Partymailingname			:  ##Dyms_PartyMailingName
+	831		:  Set Value		: Partyname					:  ##Dyms_PartyNameVar;"Shiv Ganga Marbles"
+	835		:  Set Value		: PartyGSTIN				:  If ##Dyms_PartyGSTINVar="No" then "" Else ##Dyms_PartyGSTINVar
+	836		:  Set Value		: PartyPincode				:  ##Dyms_PartyPINCODEVar;"110085"
+	837		:  Set Value		: Address					:  ##Dyms_PartyAddressVar;"Shiv Ganga Marbles"
+
+	1662	:If: Not $$Isempty:##Dyms_PartyCityVar
+	1682	:	Insert Collection Object	:	Address
+	1702	:	Set Value					: 	Address       :	$$String:##Dyms_PartyCityVar
+	1722	:	Set Target					:	..
+	1742	:End If
+	
+	215  	:  Set Value   		: StateName    				:  ##Dyms_PartyStateVar
+	8385	: End If
+	
+	
+;;;;;;; Dispatch Details  ;;;;;;;;;;;;
+	840		: Walk Collection:DymsJsonSalesTransportCollection
+	845		:  Set Value		: BasicShipVesselNo			: $$String:$Dyms_VehicleNumber
+	;850		:  Set Value		: BasicFinalDestination		:	""
+	855		:  Set Value		: BasicShippedBy			: $$String:$Dyms_TransportMode
+	865		: End Walk
+
+;;;;;;;; e-invoice details ;;;;;;;;;;;;
+	209		:  Set Value		: VCHSalesQRCodeSt			:  $$String:##Dyms_IRNQRCodeVar
+	205p 	:  Set Value		: IRN						:  $$String:##Dyms_IRNVar		
+	206q 	:  Set Value		: IRNAckDate				:  $$Date:##Dyms_IRNAckDateVar	
+	207r 	:  Set Value		: IRNAckNo					:  $$String:##Dyms_IRNAckNoVar	
+	1150 	:  Set Value		: ResetIRNQrCode			:  Yes
+
+;;;;; e-waybill details  ;;;;;;;;;;;;;;;
+
+	;	025	:	If		: $$IsEmptyCollection:EwayBillDetails
+	026	:   	Call	: InsertCreateGSTeWayBillDetailssync
+;	027	:   	Return
+;	030	:	Else
+;	035	:		Set Target  : EwayBillDetails[Last].
+;	040	:		Set Object	: EwayBillDetails[Last].
+;	045	:	End If
+
+	210 	:  Set Value		: Narration					:  $$String:##Dyms_REMARKNOTEVar;""
+;	212		:  Set Value		: Reference					:  $$String:##Dyms_VoucherNumberVar
+;	213		:  Set Value		: ReferenceDate				:  $$Date:##Dyms_VoucherDateVar
+	214  	:  Set Value   		: CountryofResidence 		:  ##Dyms_PartyCountryVar
+	
+;;;;;;;;; Voucher total amount balance with party	;;;;;;;;;;;;;	
+
+	1000	:	Insert Collection Object				:	LedgerEntries
+	1010	:	Set Value	: LedgerName				:	If ($$IsEqual:##Dyms_PartyNameVar:##TallyLedgername or $$IsEmpty:##TallyLedgername) Then $$String:##Dyms_PartyNameVar Else $$String:##TallyLedgername
+	1015	:	Set Value	: IsDeemedPositive			:	Yes
+	1020	:	Set Value	: ISPARTYLEDGER				:	Yes
+	1025	:	Set Value	: Amount					:	$$Negative:$$AsAmount:##Dyms_PartyVCHAMOUNTVar;*-1 
+	
+	1030	:	Insert Collection Object				:	BillAllocations
+	1035	:	Set Value		:	NAME				:	$$String:##Dyms_VoucherNumberVar
+	1036	:	Set Value		:	BILLTYPE			:	$$SysName:NewRef  
+	; 1040	:	Set Value		:	BillCreditPeriod	:	$$DateRange:($$Date:##Dyms_VoucherDateVar):($$Date:##Dyms_VoucherDateVar):True
+	1045	:	Set Value		:	AMOUNT				:	$$Negative:$$AsAmount:##Dyms_PartyVCHAMOUNTVar;*-1
+	1048	:	Set Target:..
+	
+	1050	:	Show Progress:$$LoopIndex:$$Sprintf:" %s %s":($$LocaleString:"Sales Voucher Importing for.."):(##Dyms_VoucherNumberVar)
+	
+;;;;;;;;;;;;;;;;;;; Inventory Allocation ;;;;;;;;;;;;;;;;;;;;;;;;;;
+	2000 	: Walk Collection:DymsJsonSalesInvCollections
+	2010	:	Set:Dyms_SVProductCodeVar				:	$Dyms_PRODUCTCODE			
+	2022	:	Set:Dyms_SALELEDGERNAME					:	$Dyms_SALELEDGERNAME;"Sales Import";	$GulfBattery_BatchName			
+	2032	:	Set:Dyms_SVQuantityVar					:	$Dyms_QUANTITY		
+	2042	:	Set:Dyms_SVRateVar						:	$Dyms_VoucherRATE	
+	2052	:	Set:Dyms_SVoucherGrossAmtVar			:	$Dyms_VoucherVchAmount		
+	2062	:	Set:Dyms_SVoucherInvAmtVar				:	$Dyms_VoucherVchAmount			
+	2072	:	Set:Dyms_DiscountPercsVar				:	$Dyms_VoucherdiscPERC
+	2807	:	Set: Dyms_Desc1 						: 	$Dyms_Desc1
+	2808	:	Set: Dyms_Desc2 						: 	$Dyms_Desc2
+	2897	:	Set: Dyms_Desc3 						: 	$Dyms_Desc3
+	289b	:	Set: Dyms_Desc4 						: 	$Dyms_Desc4
+	289c	:	Set: Dyms_Desc5 						: 	$Dyms_Desc5
+	
+	211		:  Set Value		: CLASSNAME					:  ##Dyms_SALELEDGERNAME
+	
+	157		:	If		:	 $$IsEmpty:($Name:Stockitem:##Dyms_SVProductCodeVar)
+	155		:	Log		:	"Error: StockItem   " + ##Dyms_SVProductCodeVar+"   Does not exist"
+	159		:	else
+	
+	2500 	: 	Insert Collection Object: ALLINVENTORYENTRIES
+	2510 	: 	Set Value		:	STOCKITEMNAME						:	$$String:##Dyms_SVProductCodeVar
+
+	2810	:	 Insert Collection Object	: BasicUserDescription
+	2820	:	 Set Value	: BasicUserDescription  : ##Dyms_Desc1
+	2825	:    Set Target: ..
+	
+	2830	:	 Insert Collection Object	: BasicUserDescription
+	2835	:	 Set Value	: BasicUserDescription  : ##Dyms_Desc2
+	2840 	:    Set Target: ..
+
+	2819	:	 Insert Collection Object	: BasicUserDescription
+	2829a	:	 Set Value	: BasicUserDescription  : ##Dyms_Desc3
+	2829b	:    Set Target: ..
+	   
+	2839a	:	 Insert Collection Object	: BasicUserDescription
+	2839b	:	 Set Value	: BasicUserDescription  : ##Dyms_Desc4
+	2849c	:    Set Target: ..
+	   
+	2819d	:	 Insert Collection Object	: BasicUserDescription
+	2829e	:	 Set Value	: BasicUserDescription  : ##Dyms_Desc5
+	2829f	:    Set Target: ..
+	
+	2513 	: 	Set Value		:	ISDEEMEDPOSITIVE					:	 No
+	2520	:	Set Value   	:	ACTUALQTY							:	$$Negative:$$TgtObject:($$AsQty:##Dyms_SVQuantityVar);*-1
+	2530	:	Set Value		:	BILLEDQTY							:	$$Negative:$$TgtObject:($$AsQty:##Dyms_SVQuantityVar);*-1	 
+	2535	:	Set Value		:	RATE						 		:	($$TgtObject:($$AsRate:##Dyms_SVRateVar))
+	2536	:   Set Value		: 	Discount							:	($$TgtObject:($$Number:##Dyms_DiscountPercsVar))
+	2538 	: 	Set Value		:	AMOUNT								:	$$AsAmount:##Dyms_SVoucherInvAmtVar
+	
+	2600	: 	INSERT COLLECTION OBJECT: BATCHALLOCATIONS
+	2601 	:  	SET VALUE		: 	GODOWNNAME							:   $$LocaleString:"Main Location";@@DymcsFTPCustomerInvenFolder11;
+	;2603	:	Set Value		:	BatchName							:	$$String:##GulfBattery_SVBatchNameVar
+	2610	:   SET VALUE		: 	ACTUALQTY							:  ($$TgtObject:$$AsQty:##Dyms_SVQuantityVar)*-1	 
+	2611	:  	SET VALUE		: 	BILLEDQTY							:  ($$TgtObject:$$AsQty:##Dyms_SVQuantityVar)*-1
+	2616	:  	SET VALUE		: 	RATE								:   ($$TgtObject:($$AsRate:##Dyms_SVRateVar))		 
+	2617	:   Set Value		: 	BatchDiscount						:	$$TgtObject:$$Number:##Dyms_DiscountPercsVar
+	2620 	:  	SET VALUE		: 	AMOUNT								:   $$AsAmount:$$AsAmount:##Dyms_SVoucherInvAmtVar
+	;2630	:  	SET VALUE		:   ORDERDUEDATE						:   $$DateRange:($$TgtObject:$$Date:##GulfBattery_SalesVoucherDateVar):($$TgtObject:$$Date:##GulfBattery_SalesVoucherDateVar):True
+	2660	: 	Set Target		:	..			
+			
+;;;;;;;;;;;;;;;; Sales accounts	;;;;;;;;;;;;;;;;;;;;;;;;
+	2700	: 	INSERT COLLECTION OBJECT: ACCOUNTINGALLOCATIONS				
+	2710	: 	SET VALUE		: LedgerName							: 	$$String:##Dyms_SALELEDGERNAME;"SALES GST";##GulfBattery_SVCommonSalesAccount
+	2720	: 	SET VALUE		: IsDeemedPositive						: 	No
+	2730	: 	SET VALUE		: ISPARTYLEDGER							: 	No
+	2740	: 	Set Value		: Amount								: 	$$AsAmount:##Dyms_SVoucherInvAmtVar;*-1
+	2750	: 	Set Target		: ..
+	2760	: 	Set Target		: ...
+	2999	: End If
+	3000	: End Walk
+	
+	3100    : Walk Collection:DymsJsonSalesLedCollections	
+	3101	: 	Set :	Dyms_SVoucherIGSTAmtVar:$Dyms_IGST 
+	3102	: 	Set :	Dyms_SVoucherSGSTAmtVar:$Dyms_SGST  
+	3103	: 	Set :	Dyms_SVoucherCGSTAmtVar:$Dyms_CGST  
+	3104	: 	Set :	Dyms_SVoucherRoundoffAmtVar:$Dyms_ROUNDOFF;"
+;	310a	: 	Set : Dyms_SVoucherLabourCharges:$Dyms_LABOURCharges
+;	310b	: 	Set : Dyms_SVoucherTransportCharges:$Dyms_TransportCharges
+;	
+;	312a	: If 	: Not ##Dyms_SVoucherCGSTAmtVar="0.00"
+;	312b	: 	INSERT COLLECTION OBJECT			: LEDGERENTRIES
+;	312c	: 	SET VALUE		: LedgerName		: $$String:"Transportation Charges (Sales)/packing";@@DymcsFTPCustomerInvenFolder8;"CGST"
+;	312d	: 	SET VALUE		: IsDeemedPositive	: No
+;	312e	: 	SET VALUE		: ISPARTYLEDGER		: No
+;	312f	: 	SET VALUE		: REMOVEZEROENTRIES	: Yes
+;	312g	: 	Set Value		: Amount			: $$AsCrAmt:##Dyms_SVoucherTransportCharges 
+;	312h	: 	Set Target		: ..
+;	313i	: End If
+;	
+;	313a	: If 	: Not ##Dyms_SVoucherLabourCharges="0.00"
+;	313b	: 	INSERT COLLECTION OBJECT			: LEDGERENTRIES
+;	313c	: 	SET VALUE		: LedgerName		: $$String:"Labour Charges";@@DymcsFTPCustomerInvenFolder9;"SGST"
+;	313d	: 	SET VALUE		: IsDeemedPositive	: No
+;	313e	: 	SET VALUE		: ISPARTYLEDGER		: No
+;	313f	: 	SET VALUE		: REMOVEZEROENTRIES	: Yes
+;	313g	: 	Set Value		: Amount			: $$AsCrAmt:##Dyms_SVoucherLabourCharges 
+;	313h	: 	Set Target		: ..
+;	314i 	: End If
+;
+	3106	: If 	: (##Dyms_SVoucherIGSTAmtVar>0)
+	3108	: 	INSERT COLLECTION OBJECT			: LEDGERENTRIES
+	3110	: 	SET VALUE		: LedgerName		: $$String:@@MDIGSTLedger;"IGST"
+	3112	: 	SET VALUE		: IsDeemedPositive	: No
+	3114	: 	SET VALUE		: ISPARTYLEDGER		: No
+	3116	: 	SET VALUE		: REMOVEZEROENTRIES	: No
+	3117	: 	Set Value		: Amount			: $$AsCrAmt:##Dyms_SVoucherIGSTAmtVar 
+	3118	: 	Set Target		: ..
+	3119	: End If
+	
+	
+	3120	: If 	: (##Dyms_SVoucherCGSTAmtVar>0) 
+	3122	: 	INSERT COLLECTION OBJECT			: LEDGERENTRIES
+	3124	: 	SET VALUE		: LedgerName		: $$String:@@MDCGSTLedger;"CGST"
+	3125	: 	SET VALUE		: IsDeemedPositive	: No
+	3126	: 	SET VALUE		: ISPARTYLEDGER		: No
+	3127	: 	SET VALUE		: REMOVEZEROENTRIES		: Yes
+	3128	: 	Set Value		: Amount			: $$AsCrAmt:##Dyms_SVoucherCGSTAmtVar 
+	3129	: 	Set Target		: ..
+	3130	: End If
+	
+	3132	: If 	: (##Dyms_SVoucherSGSTAmtVar>0)
+	3133	: 	INSERT COLLECTION OBJECT			: LEDGERENTRIES
+	3134	: 	SET VALUE		: LedgerName		: $$String:@@MDSGSTLedger;"SGST"
+	3135	: 	SET VALUE		: IsDeemedPositive	: No
+	3136	: 	SET VALUE		: ISPARTYLEDGER		: No
+	3137	: 	SET VALUE		: REMOVEZEROENTRIES	: Yes
+	3138	: 	Set Value		: Amount			: $$AsCrAmt:##Dyms_SVoucherSGSTAmtVar 
+	3139	: 	Set Target		: ..
+	3140	: End If
+	
+
+	3202	: If 	: Not $$IsEmpty:##Dyms_SVoucherRoundoffAmtVar
+	;3202A:Msg Box:roundoff:##Dyms_SVoucherRoundoffAmtVar	
+	3205	: If	: $$IsNegative:##Dyms_SVoucherRoundoffAmtVar
+	;3205A:Msg Box:Negative:##Dyms_SVoucherRoundoffAmtVar
+	3214	: 	INSERT COLLECTION OBJECT			: LEDGERENTRIES
+	3216	: 	SET VALUE		: LedgerName		: $$String:@@MDRoundOFF;"Round Off";##GulfBattery_SVRoundOffLedgerVar
+	3218	: 	SET VALUE		: IsDeemedPositive	: No
+	3219	:	Set Value		: LedgerFromItem 	: No
+	3220	:	Set Value 		: IsPartyLedger 	: No
+	3221	: 	SET VALUE		: REMOVEZEROENTRIES		: Yes
+	3222	:	Set Value 		: IsLastDeemedPositive : No
+	3223	: 	Set Value		: Amount			: $$AsAmount:##Dyms_SVoucherRoundoffAmtVar*1
+	3224	: 	Set Target		: ..
+	3230	: Else
+	;2231:Msg Box:Positive:##Dyms_SVoucherRoundoffAmtVar
+	3234	: 	INSERT COLLECTION OBJECT			: LEDGERENTRIES
+	3236	: 	SET VALUE		: LedgerName		: $$String:@@MDRoundOFF;"Round Off";##GulfBattery_SVRoundOffLedgerVar
+	3238	: 	SET VALUE		: IsDeemedPositive	: No;Yes
+	3239	: 	SET VALUE		: REMOVEZEROENTRIES		: Yes
+	;3240	: 	SET VALUE		: ISPARTYLEDGER		: No
+	3242	: 	Set Value		: Amount			: $$AsAmount:##Dyms_SVoucherRoundoffAmtVar*1
+	3244	: 	Set Target		: ..
+	3250	: End If
+	3254	: End If
+	4000	: End Walk
+
+	5000	: Create Target
+
+;;;;;;;;;;;;;;;; Log File ;;;;;;;;;;;;;;;;;;;;;;;;;;
+	5002	:  If: not $$LastResult
+	5004	:   Set File Log On
+	5005	:   OPEN FILE :@@MDSaleslogfilepatch:Text:Write 
+	5010	:	Write File Line	: $$String:($$LastError)
+	5020	:	Write File Line	: $$String:"Error from :"+$$String:##Dyms_VoucherNumberVar
+	5030	:	Set File Log Off
+	5040	:	Close Target File
+	5042	:	Increment: ErrCount
+	5044	:  End If
+	5450	:  End Walk
+	
+;;;;;;;;;;;;;;;;; Error Message ;;;;;;;;;;;;;;;;;;
+	LocalFormula:	DateTimeFolderNN	:	$$LocaleString:($$YearOfDate:$$MachineDate)+$$LocaleString:"-"+$$LocaleString:($$ZeroFill:($$MonthOfDate:$$MachineDate):2)+$$LocaleString:"-"+$$LocaleString:($$ZeroFill:($$DayOfDate:$$MachineDate):2)+$$LocaleString:"-"+$$LocaleString:($$StringFindAndReplace:($$MachineTime):":":"-")
+	12752	:	If	: ##Errcount = 0
+	5490	:	Copy File	:	($$string:(@@MDSalesfileArchpatch + "\" + @DateTimeFolderNN + "\" )) : ($$String:##Dyms_LocalFileNames)
+	5500	:	Delete File:##Dyms_LocalFileNames
+;;	5500a	:	Delete File:@@MDSalesfilepatch +"\New folder"
+	1201F	: 	Copy File		: @@RetailerDownloadFTPSalesArch+"/"+@DateTimeFolderNN+"/"	:   @@RetailerDownloadFTPSales+"/"+$Name
+	1205F	: 	Delete File:   @@RetailerDownloadFTPSales+"/"+$Name
+	12753	:	Set	:	Dyms_CountrMsgVAr2	:	$$LocaleString:"Status : Process Completed! Sales Imported Successfully!! "
+	12754	:		Log	:  ##Dyms_CountrMsgVAr2
+	12756	:	Else
+	5500L	:	Delete File:##Dyms_LocalFileNames ;; If There is an error the local file should also delete
+	12757	:	Set	:	Dyms_CountrMsgVAr3	:	$$LocaleString:"Status : Error While Importing!! Please Refer Log File " +$$LocaleString:@@MDSaleslogfilepatch
+	12758	:		Log: ##Dyms_CountrMsgVAr3
+	1040a	: Decrement: ErrCount  ;; If there is a Error then remaining files should not Archive, Because to mentain serial voucher number
+	12760	:	End If
+	
+;;;;;;;;;;; End Progress and End batch Post ;;;;;;;;;;;;;;;;;;;
+	5455	: End Progress
+	5470	: End Batch Post
+	5480	: Else
+;	5485	: 	Set	:	DymsLocalHostPathUploadDown	:	@@MDSalesfileArchpatch
+	12700	: End If
+	12750	: End Walk
+			  
+	12780	: Else
+	12790	: Log: "No Data File In Sales Folder"
+	12800	: 	End If
+	12810	: Else
+	12820	: Msg Box	:	"Warning!" :	"Check Internet Availability!"
+	12830	: 	End If
+
+	12835	: Return
+;;;;;;;;;;; QR code data store ;;;;;;;;;;;;;;;;;
+[#Part: DBLLINE Narration]
+	
+	Option	: DBlLine Narration SERVICEDATE :  @@issales 
+
+[!Part:DBlLine Narration SERVICEDATE] 
+
+	Add : Line: Before : VCH NarrPrompt:VCH SalesSERVICEDATE
+	
+[Line: VCH SalesSERVICEDATE]
+		
+	Field	: Medium Prompt,  VCH SalesQRCode 
+
+	Local	: Field	: VCH SalesQRCode : Width	:	140
+
+[Field:VCH SalesQRCode]
+	Use			: Narration Field
+	Storage 	: VCHSalesQRCodeSt
+	Invisible	: Yes
+	Set Always	: Yes
+;[#Field: VCH Narration]
+;	Set as	: #VCHSalesQRCode
+	
+;;;;;;;;;;;;;;; E-Waybill Function ;;;;;;;;;;;;;;;
+[Function: InsertCreateGSTeWayBillDetailssync]
+	
+	Variable	: ValidUpTo		: String
+	Variable	: UpdatedDate	: String
+	006	:	Walk Collection:DymsJsonSalesEwaybillCollection
+	007	:	Set	: ValidUpTo		:	$Dyms_Validupto
+	008	:	Set	: UpdatedDate	:	$Dyms_Updateddate
+	
+	005	: 		Insert Collection Object			: EwayBillDetails
+	010	:		Set Value	: BillNumber			: $Dyms_BillNumber
+	015	: 		Set Value	: BillDate 	      		: $$Date:$Dyms_BillDate
+	;020	:		Set Value	: ConsolidatedBillNumber: $tempGSTewayconsBillNumber
+	;025	:		Set Value	: ConsolidatedBillDate	: $tempGSTewayconsBillDate
+	030	: 		Set Value	: SubType           	: $$String:$Dyms_SubType;"Supply";$tempGSTewaysubType
+	035	: 		Set Value	: DocumentType      	: $$String:$Dyms_DocumentType;"Tax Invoice";$tempGSTewaydocumentType
+	;040	: 		Set Value	: BillStatus        	: $tempGSTewayStatus
+	045	: 		Set Value	: IgnoreGSTINValidation	: No
+	
+;	050	: 		Set Value	: ConsignorName			: $tempGSTewayConsignor
+;	055	:   	Set Value	: ConsignorGSTIN   		: $tempGSTewayconsignorTin
+;	060	: 		Set Value	: ConsignorAddressType	: ##tempConsignorAddrType
+;	125	:		Walk Collection	: GSTeWayConsignorAddress
+;	130	:			Insert Collection Object	: ConsignorAddress
+;	135	: 				Set Value	: ConsignorAddress		: $tempConsignorAddress
+;	140	:			SET Target	: ..
+;	145	:       END WALK
+	175	: 		Set Value	: ConsignorPlace		: $$String:$Dyms_ConsignorPlace;"Mangalore";$tempGSTewayFromPlace
+	180	: 		Set Value	: ConsignorPincode		: $$Number:$Dyms_ConsignorPincode;"575005";$tempGSTewayPincode
+;	185	: 		Set Value	: ConsignorStateName	: $$String:"Karnataka";$tempGSTewayconsignorState
+	190	:		Set Value	: ShippedFromState		: $$String:$Dyms_ShippedFromState;"Karnataka";$tempGSTewayconsShipFromState
+	
+	195	: 		Set Value	: ConsigneeName			: $Dyms_Consigneemailingname;"Shiv Ganga Marbles";"Shiv ganga Marbles";$tempGSTewayConsignee
+;	200	:		Set Value	: ConsigneeAddressType	: ##tempConsigneeAddrType
+;	205	:		Walk Collection	: GSTeWayConsigneeAddress
+;	210	:			Insert Collection Object	: ConsigneeAddress
+	215	: 				Set Value	: ConsigneeAddress		: $Dyms_ConsigneeAddress;"Bangalore";$tempConsigneeAddress
+;	220	:			SET Target	: ..
+;	225	:       END WALK
+	255	: 		Set Value	: ConsigneePlace	    : $$STRING:$Dyms_ConsigneePlace;"Delhi";$tempGSTewayconsFromPlace
+    260	: 		Set Value	: ConsigneePincode		: $$STRING:$Dyms_ConsigneePincode;"110085";$tempGSTewayConsPincode
+ ;   265	: 		Set Value	: ConsigneeStateName    : $$STRING:"Delhi";$tempGSTewayConsState
+	270	:		Set Value	: ShippedToState		: $$STRING:$Dyms_ShippedToState;"Delhi";$tempGSTewayconsShipToState
+   275	: 		Set Value	: ConsigneeGSTIN	    : $Dyms_Consigneegstin;$$STRING:"07BAGPG3952C1Z1";$tempGSTewayConsTin
+	276	:		Set Value	: Updateddate			: ##UpdatedDate
+	277	:		Set Value	: Validupto				: ##ValidUpTo 
+	278	:	End Walk
+	
+	281	:	Walk Collection:DymsJsonSalesTransportCollection
+	280	:			Insert Collection Object	: TransportDetails
+	285	:				Set Value	: TransporterName	 : $$String:$Dyms_TransporterName
+    290	:				Set Value	: DocumentNumber	 : $Dyms_DocumentNumber
+    295	:				Set Value	: DocumentDate       : $$Date:$Dyms_DocumentDate
+    300	:				Set Value	: TransporterID      : $$String:$Dyms_TransporterID
+    305	:				Set Value	: TransportMode    	 : $$String:$Dyms_TransportMode
+    310	:				Set Value	: VehicleNumber      : $$String:$Dyms_VehicleNumber
+;	315	: 				Set Value	: OldVehicleType	 : $tempGSTewayVehicleType
+	317	: 				Set Value	: VehicleType		 : $$String:$Dyms_VehicleType
+    320	:				Set Value	: Distance			 : $$Number:$Dyms_Distance
+	321	:	End Walk	
+	325	:				Set Value	: IgnoreVehicleNoValidation: No	
+	326	: 				Set Value	: ISTRANSIDPENDING	 : No
+	327	: 				Set Value	: ISTRANSIDUPDATED	 : No
+	328	: 				Set Value	: ISEXPORTEDFORTRANSPORTERID : No
+	350	: 				Set Value	: IsPartBUpdated			: Yes
+	355	: 				Set Value	: IsExportedforPartB		: No	
+	360	: 				Set Value	: IsPartBPending			: No	
+	462	:				If		 	: NOT No
+	465 :					Set Value	: IGNOREPARTBVALIDATION		 : NO
+	449	:					Set Value	: IGNORETRANSIDVALIDATION	 : No
+	470	:				Else		
+	475	:					Set Value	: IGNOREPARTBVALIDATION		 : Yes
+	480	: 					Set Value	: IGNORETRANSIDVALIDATION	 : yes
+	485	:				END IF 		
+	530	:			Set Target	: ..
+	535	:  Set Target	: ..
+		
+
+[Collection:DymsJsonSalesEwaybillCollection]
+	
+	Source Collection:DymsJsonSalesCollection	
+	Walk				:  EWAYBILL
+	compute				:	Dyms_VoucherNumberLed		:	$.SALENUMBER
+	compute				:	Dyms_BillNumber				:	$BillNumber
+	compute				:	Dyms_BillDate				:	$BillDate
+	Compute				:	Dyms_SubType				:	$SubType
+	Compute				:	Dyms_DocumentType			:	$DocumentType
+	Compute				:	Dyms_ConsignorPlace			:	$ConsignorPlace
+	Compute				:	Dyms_ConsignorPincode		:	$ConsignorPincode
+	Compute				: 	Dyms_ShippedFromState		: 	$ShippedFromState
+	Compute				:	Dyms_Consigneemailingname	:	$Consigneemailingname
+	Compute				:	Dyms_ConsigneeAddress		:	$ConsigneeAddress
+	Compute				:	Dyms_ConsigneePlace			:	$ConsigneePlace
+	Compute				:	Dyms_ConsigneePincode		:	$ConsigneePincode
+	Compute				:	Dyms_Consigneegstin			:	$Consigneegstin
+	Compute				: 	Dyms_ShippedToState			: 	$ShippedToState
+	Compute				:	Dyms_Validupto				:	$Validupto
+	Compute				:	Dyms_Updateddate			:	$Updateddate
+	Filter : SalesLedVchnoFilter
+
+[Collection:DymsJsonSalesTransportCollection]
+	
+	Source Collection:DymsJsonSalesCollection	
+	Walk				:  Transport
+	compute				:	Dyms_VoucherNumberLed		:	$.SALENUMBER
+	compute				:	Dyms_TransporterName		:	$TransporterName
+	compute				:	Dyms_DocumentNumber			:	$DocumentNumber
+	Compute				:	Dyms_DocumentDate			:	$DocumentDate
+	Compute				:	Dyms_TransporterID			:	$TransporterID
+	Compute				:	Dyms_TransportMode			:	$TransportMode
+	Compute				:	Dyms_VehicleNumber			:	$VehicleNumber
+	Compute				: 	Dyms_VehicleType			: 	$VehicleType
+	Compute				:	Dyms_Distance				:	$Distance
+	Filter : SalesLedVchnoFilter
+
+;;;;;;;;;;;;; Restrict E-invoice Edit ;;;;;;;;;;;;;;;;;
+[#Form: SalesColor]
+	Control: MYVCHCtrlMsg: $$InAlterMode And Not $$IsEmpty:$IRN;#GSTeInvIRN; and (Not $$IsEmpty:$IRNQRCode)
+	Local: Field: EI Consignee	: Add :Control:MYVCHCtrlMsg : @@IRNControl;Plain VCH Date;
+	
+[System : Formula]
+MYVCHCtrlMsg : "E-Invoice Sales Are Restricted For Alteration";"You Are Not Authorized to Alter"
+IRNControl : $$InAlterMode And (Not $$IsEmpty:$IRN)
+Mailingname: IF $FirstLedger="RETAIL CUSTOMER" And Not $$IsEmpty:$PartyMailingName Then $$LocaleString:"   (" + $PartyMailingName + $$LocaleString:")" Else ""
+LedMailingName : If $$Issales:$Vouchertypename And Not $$IsEmpty:$partyMailingname And ##LedgerName="RETAIL CUSTOMER" Then "   (" + $partyMailingname + ")" Else ""
+
+;;;;;;;;;; Report Ledger Mailing Name ;;;;;;;;;;;;;
+;;;;;;Main Sales Register Collection ;;;;;;;;
+[#Collection: Filtered Vouchers of Company]
+	Fetch: Partymailingname
+	Delete: Sort
+;;;;;;;;; Ledger report Collections ;;;;;;;;;
+[#Collection: Vouchers of Ledger]
+	Fetch	: Partymailingname
+	
+;;;;;;;;;; Daybook Collection ;;;;;;;;;;;	
+[#Collection: Daybook Vouchers of Company]
+	Fetch    : PartyMailingName
+	Delete	: Sort
+;;;;;;;;;; Voucher Register or List of voucher ;;;;;;;;;
+[#Collection: Specific Vouchers of Company]
+	Fetch    : PartyMailingName
+	Delete	: Sort
+[#Field: DSP VchAccAccount]
+		Set as  		: If @UseForPOSInv AND NOT $$IsSysName:##VoucherTypeName AND @POSLedgerEntries Then +
+							$$LocaleString:"(as per details)"  Else $FirstLedger + @@MailingName
+					
+		POSLedgerEntries: $$FilterCount:AllLedgerEntries:IsPartyLedgerAccount > 1
+		UseForPOSInv	: (@@UseForPOSInvoice AND ($$AddOnInfo:POSEnabled))
+
+[#Field: DSP VchInvAccount]
+	Set as  	: $FirstLedger + @@Mailingname
+
+[#Field: DSP VchLedAccount]
+	
+    Use         : Name Field
+	Set as      : if NOT $$IsVoucher then $Name else +
+                  if ##BankRecMode AND NOT $$IsEmpty:$BasicVoucherChequeName then $BasicVoucherChequeName else +
+                  if (##IsGrpReport AND NOT $$IsExploded:DSPVchExplosion) then If @POSLedger AND NOT ##IsCCReport then $$LocaleString:"(as per details)" else $GrpName else +
+                  if $$IsExploded:DSPVchExplosion OR @POSLedger AND NOT ##IsCCReport then $$LocaleString:"(as per details)" else + 
+                  if ##IsCCReport then If $$IsExploded:DSPVchExplosion then $$LocaleString:"(as per details)" else @CCAllocName else + 
+				  if @@IsPayrollVch Then @PayVchLedName else $VchLedName + @@LedMailingname
+
+;;;;;;;;;;;;;;;; GSTIN wise Ledger sales ;;;;;;;;;;;;;;;;
+
+[Collection: LedgerGSTIN]
+
+    Use         : Alias Collection
+    Type        : Ledger
+    Title       : $$LocaleString:"List of Ledgers"
+	Compute		: Partygstin	: $Partygstin
+	Fetch		: Name, Parent, Pincode, Address, Mailingname, Statename 
+	Filter		: GSTIN
+;select $name, $Parent, $partygstin from LedgerGSTIN
+
+;;;;;;;;;;;;;;;; Sort By Voucher number ;;;;;;;;;;;;;;;
+
+[#Collection: Sorting Methods]
+List Name :@@JKTRVchVCHName
+
+[System : Formula]
+JKTRVchVCHName: $$TDLSysName:Sort_JKVchNoName
+GSTIN	: $Partygstin = ##Dyms_PartyGSTINVar
+
+[System: TDL Name]
+Sort_JKVchNoName:321:$$Translate:"Voucher Number (Ascending)"
+
+	[#Collection: Daybook Vouchers of Company]
+		Add: Sort        : @@JKTRVchVCHName            : $$Number:$Vouchernumber
+;    [#Collection: Columnar Vouchers of Ledgers]
+;		Add: Sort        : @@JKTRVchVCHName            : $$Number:$Vouchernumber
+;    [#Collection: Vouchers of Ledger]                    
+;		Add: Sort        : @@JKTRVchVCHName            : $$Number:$Vouchernumber
+;    [#Collection: Vouchers of Company]                   
+;        Add: Sort        : @@JKTRVchVCHName            : $$Number:$Vouchernumber
+    [#Collection: Filtered Vouchers of Company]          
+        Add: Sort        : @@JKTRVchVCHName            : $$Number:$Vouchernumber
+;    [#Collection: Columnar Filtered Vouchers of Company] 
+;		Add: Sort        : @@JKTRVchVCHName            : $$Number:$Vouchernumber
+    [#Collection: SRC Filtered Vouchers of Company]      
+        Add: Sort        : @@JKTRVchVCHName            : $$Number:$Vouchernumber
+    [#Collection: Specific Vouchers of Company]          
+		Add: Sort        : @@JKTRVchVCHName            : $$Number:$Vouchernumber
+;    [#Collection: SRC Specific Vouchers of Company]      
+;        Add: Sort        : @@JKTRVchVCHName            : $$Number:$Vouchernumber
+;	[#Collection: GSTR TrglVchBase]                      
+;		Add: Sort        : @@JKTRVchVCHName            : $$Number:$Vouchernumber
